@@ -1,0 +1,15 @@
+name = "briefing-cron"
+main = "briefing-cron.js"
+compatibility_date = "2024-09-23"
+
+# Cron: UTC 00:00 = KST 09:00 매일 실행
+[triggers]
+crons = ["0 0 * * *"]
+
+# 비민감 변수 — Dashboard 또는 아래에서 직접 설정
+[vars]
+GOOGLE_SHEET_ID = "여기에_시트_ID_입력"
+
+# 민감 시크릿은 CLI로 등록:
+#   wrangler secret put ANTHROPIC_API_KEY
+#   wrangler secret put GOOGLE_SERVICE_ACCOUNT   (서비스 계정 JSON 전체를 붙여넣기)
