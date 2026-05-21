@@ -157,6 +157,7 @@ nav a { text-decoration: none; }
           <div><label class="block text-label-sm text-on-surface-variant mb-1">URL</label><input id="e-url" type="text" placeholder="https://youtube.com/..." class="w-full border border-warm-sand rounded-lg px-3 py-2 text-body-md focus:outline-none focus:ring-2 focus:ring-primary/50"></div>
           <div><label class="block text-label-sm text-on-surface-variant mb-1">제목</label><input id="e-title" type="text" placeholder="콘텐츠 제목" class="w-full border border-warm-sand rounded-lg px-3 py-2 text-body-md focus:outline-none focus:ring-2 focus:ring-primary/50"></div>
           <div><label class="block text-label-sm text-on-surface-variant mb-1">한줄 코멘트</label><input id="e-desc" type="text" placeholder="간단한 설명" class="w-full border border-warm-sand rounded-lg px-3 py-2 text-body-md focus:outline-none focus:ring-2 focus:ring-primary/50"></div>
+          <div class="md:col-span-2"><label class="block text-label-sm text-on-surface-variant mb-1">이미지 URL</label><input id="e-image" type="text" placeholder="https://...jpg 또는 도서 표지 이미지 주소" class="w-full border border-warm-sand rounded-lg px-3 py-2 text-body-md focus:outline-none focus:ring-2 focus:ring-primary/50"></div>
         </div>
         <div class="flex gap-3">
           <button onclick="addCard()" class="px-6 py-2 bg-primary text-white rounded-full text-label-md hover:opacity-90">등록하기</button>
@@ -253,13 +254,20 @@ function buildPreviewThumb(url, icon, className) {
   return '<div class="relative w-full h-full">' + fallback + '<img class="relative z-[1] w-full h-full object-cover" src="' + preview + '" alt="" loading="lazy" onerror="this.style.display=&quot;none&quot;;"></div>';
 }
 
+function buildImageThumb(image, icon, className, objectFit) {
+  var fallback = buildFallbackThumb(icon, className);
+  if (!image) return '<div class="relative w-full h-full">' + fallback + '</div>';
+  return '<div class="relative w-full h-full">' + fallback + '<img class="relative z-[1] w-full h-full ' + (objectFit || 'object-cover') + '" src="' + escapeAttr(image) + '" alt="" loading="lazy" onerror="this.style.display=&quot;none&quot;;"></div>';
+}
+
 function escapeAttr(value) {
   return String(value || '').replace(/[&<>"']/g, function(ch) {
     return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
   });
 }
 
-function buildBookThumb(title) {
+function buildBookThumb(title, image) {
+  if (image) return buildImageThumb(image, 'menu_book', 'bg-surface-container', 'object-contain bg-surface-container p-5');
   var fallback = buildFallbackThumb('menu_book', 'bg-surface-container');
   return '<div class="relative w-full h-full">' + fallback + '<img class="hidden relative z-[1] w-full h-full object-contain bg-surface-container p-5" data-book-cover="' + escapeAttr(title) + '" alt="" loading="lazy"></div>';
 }
@@ -286,17 +294,27 @@ async function hydrateBookCovers() {
 }
 
 function buildCard(data) {
-  var type = data.type, url = data.url || '', title = data.title, desc = data.desc || '';
+  var type = data.type, url = data.url || '', title = data.title, desc = data.desc || '', image = data.image || '';
   var div = document.createElement('div');
   div.dataset.type = type;
   div.className = 'group cursor-pointer';
   var thumb = '', badge = '';
-  if (type === 'youtube') {
+  if (image) {
+    var imageIcon = type === 'book' ? 'menu_book' : (type === 'seminar' ? 'event' : 'smart_display');
+    thumb = buildImageThumb(image, imageIcon, 'bg-surface-container', type === 'book' ? 'object-contain bg-surface-container p-5' : 'object-cover');
+    if (type === 'book') {
+      badge = '<span class="material-symbols-outlined text-[16px]">menu_book</span>도서';
+    } else if (type === 'seminar') {
+      badge = '<span class="material-symbols-outlined text-[16px]">event</span>세미나';
+    } else {
+      badge = '<span class="material-symbols-outlined text-[16px]">smart_display</span>YouTube';
+    }
+  } else if (type === 'youtube') {
     var ytId = getYtId(url);
     thumb = ytId ? '<img class="w-full h-full object-cover" src="https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg" alt="">' : '<div class="w-full h-full flex items-center justify-center bg-warm-sand"><span class="material-symbols-outlined text-6xl text-clay-terracotta opacity-50">smart_display</span></div>';
     badge = '<span class="material-symbols-outlined text-[16px]">smart_display</span>YouTube';
   } else if (type === 'book') {
-    thumb = buildBookThumb(title);
+    thumb = buildBookThumb(title, image);
     badge = '<span class="material-symbols-outlined text-[16px]">menu_book</span>도서';
   } else {
     thumb = buildPreviewThumb(url, 'event', 'bg-gradient-to-br from-surface-container to-warm-sand');
@@ -328,7 +346,8 @@ function readInitialCards() {
       type: card.dataset.type || 'youtube',
       url: link ? link.href : '',
       title: title ? title.textContent.trim() : '',
-      desc: desc ? desc.textContent.trim() : ''
+      desc: desc ? desc.textContent.trim() : '',
+      image: ''
     };
   }).filter(function(card) { return card.title && deleted.indexOf(cardKey(card)) === -1; });
 }
@@ -385,7 +404,8 @@ function mergeCards(primary, secondary) {
       type: card.type || 'youtube',
       url: card.url || '',
       title: card.title || '',
-      desc: card.desc || ''
+      desc: card.desc || '',
+      image: card.image || ''
     });
   });
   return merged;
@@ -490,6 +510,7 @@ function clearContentForm() {
   document.getElementById('e-url').value = '';
   document.getElementById('e-title').value = '';
   document.getElementById('e-desc').value = '';
+  document.getElementById('e-image').value = '';
 }
 
 function showCardsGrid() {
@@ -540,11 +561,12 @@ async function addCard() {
   var url   = document.getElementById('e-url').value.trim();
   var title = document.getElementById('e-title').value.trim();
   var desc  = document.getElementById('e-desc').value.trim();
+  var image = document.getElementById('e-image').value.trim();
   if (!title) { alert('제목을 입력해주세요.'); return; }
   if (!url) { alert('연결 링크를 입력해주세요.'); return; }
   var btn = document.querySelector('#content-admin-panel button[onclick="addCard()"]');
   if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
-  var card = { type: type, url: url, title: title, desc: desc };
+  var card = { type: type, url: url, title: title, desc: desc, image: image };
   var savedRemote = false;
   try {
     var res = await fetch('/api/cards', {

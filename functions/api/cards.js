@@ -109,7 +109,7 @@ export async function onRequest(context) {
     var auth = { Authorization: 'Bearer ' + token };
 
     if (request.method === 'GET') {
-      var getRes = await fetch(SHEETS + '/' + sheetId + '/values/' + encodeURIComponent('시트1!A1:D'), {
+      var getRes = await fetch(SHEETS + '/' + sheetId + '/values/' + encodeURIComponent('시트1!A1:E'), {
         headers: auth,
       });
       var getData = await getRes.json();
@@ -123,6 +123,7 @@ export async function onRequest(context) {
             url: r[1] || '',
             title: r[2] || '',
             desc: r[3] || '',
+            image: r[4] || '',
           };
         })
         .filter(function(card) {
@@ -141,11 +142,11 @@ export async function onRequest(context) {
       }
 
       var postRes = await fetch(
-        SHEETS + '/' + sheetId + '/values/' + encodeURIComponent('시트1!A:D') + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
+        SHEETS + '/' + sheetId + '/values/' + encodeURIComponent('시트1!A:E') + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
         {
           method: 'POST',
           headers: Object.assign({}, auth, { 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ values: [[body.type, body.url || '', body.title, body.desc || '']] }),
+          body: JSON.stringify({ values: [[body.type, body.url || '', body.title, body.desc || '', body.image || '']] }),
         }
       );
       var postData = await postRes.json();

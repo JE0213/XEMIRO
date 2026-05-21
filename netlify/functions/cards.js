@@ -61,18 +61,18 @@ export const handler = async (event) => {
     const auth  = { Authorization: `Bearer ${token}` };
 
     if (event.httpMethod === 'GET') {
-      const res  = await fetch(`${SHEETS}/${sheetId}/values/시트1!A1:D`, { headers: auth });
+      const res  = await fetch(`${SHEETS}/${sheetId}/values/시트1!A1:E`, { headers: auth });
       const data = await res.json();
       if (!res.ok) throw new Error(`Sheets GET ${res.status}: ${JSON.stringify(data)}`);
 
       const cards = (data.values || [])
-        .map((r, i) => ({ rowNumber: i + 1, type: r[0] || 'youtube', url: r[1] || '', title: r[2] || '', desc: r[3] || '' }))
+        .map((r, i) => ({ rowNumber: i + 1, type: r[0] || 'youtube', url: r[1] || '', title: r[2] || '', desc: r[3] || '', image: r[4] || '' }))
         .filter(card => card.title && card.title.toLowerCase() !== 'title');
       return { statusCode: 200, headers: CORS, body: JSON.stringify(cards) };
     }
 
     if (event.httpMethod === 'POST') {
-      const { type, url, title, desc } = JSON.parse(event.body || '{}');
+      const { type, url, title, desc, image } = JSON.parse(event.body || '{}');
       if (!title) {
         return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: '제목 필수' }) };
       }
@@ -80,13 +80,13 @@ export const handler = async (event) => {
         return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'URL 필수' }) };
       }
 
-      const range = encodeURIComponent('시트1!A:D');
+      const range = encodeURIComponent('시트1!A:E');
       const res = await fetch(
         `${SHEETS}/${sheetId}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
         {
           method: 'POST',
           headers: { ...auth, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: [[type, url || '', title, desc || '']] }),
+          body: JSON.stringify({ values: [[type, url || '', title, desc || '', image || '']] }),
         }
       );
       const data = await res.json();
