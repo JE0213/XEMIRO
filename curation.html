@@ -249,9 +249,8 @@ function buildFallbackThumb(icon, className) {
 
 function buildPreviewThumb(url, icon, className) {
   var fallback = buildFallbackThumb(icon, className);
-  var preview = getLinkPreviewImage(url);
-  if (!preview) return '<div class="relative w-full h-full">' + fallback + '</div>';
-  return '<div class="relative w-full h-full">' + fallback + '<img class="relative z-[1] w-full h-full object-cover" src="' + preview + '" alt="" loading="lazy" onerror="this.style.display=&quot;none&quot;;"></div>';
+  if (!url) return '<div class="relative w-full h-full">' + fallback + '</div>';
+  return '<div class="relative w-full h-full">' + fallback + '<img class="hidden relative z-[1] w-full h-full object-cover" data-page-preview="' + escapeAttr(url) + '" alt="" loading="lazy"></div>';
 }
 
 function buildImageThumb(image, icon, className, objectFit) {
@@ -266,29 +265,80 @@ function escapeAttr(value) {
   });
 }
 
-function buildBookThumb(title, image) {
+function buildBookThumb(title, image, url) {
   if (image) return buildImageThumb(image, 'menu_book', 'bg-surface-container', 'object-contain bg-surface-container p-5');
   var fallback = buildFallbackThumb('menu_book', 'bg-surface-container');
-  return '<div class="relative w-full h-full">' + fallback + '<img class="hidden relative z-[1] w-full h-full object-contain bg-surface-container p-5" data-book-cover="' + escapeAttr(title) + '" alt="" loading="lazy"></div>';
+  return '<div class="relative w-full h-full">' + fallback + '<img class="hidden relative z-[1] w-full h-full object-contain bg-surface-container p-5" data-book-cover="' + escapeAttr(title) + '" data-book-url="' + escapeAttr(url || '') + '" alt="" loading="lazy"></div>';
+}
+
+function showImageWhenLoaded(img, src) {
+  return new Promise(function(resolve) {
+    if (!src) { resolve(false); return; }
+    img.onload = function() {
+      img.classList.remove('hidden');
+      resolve(true);
+    };
+    img.onerror = function() {
+      img.removeAttribute('src');
+      resolve(false);
+    };
+    img.src = src;
+  });
+}
+
+async function getPagePreviewImage(url) {
+  if (!url) return '';
+  try {
+    var res = await fetch('/api/preview?url=' + encodeURIComponent(url));
+    if (res.ok) {
+      var data = await res.json();
+      if (data.image) return data.image;
+    }
+  } catch(e) {
+    console.warn('페이지 이미지 로드 실패:', e);
+  }
+  return getLinkPreviewImage(url);
+}
+
+async function hydratePagePreviews() {
+  var images = Array.prototype.slice.call(document.querySelectorAll('img[data-page-preview]'));
+  images.forEach(async function(img) {
+    var url = img.getAttribute('data-page-preview');
+    var preview = await getPagePreviewImage(url);
+    await showImageWhenLoaded(img, preview);
+  });
 }
 
 async function hydrateBookCovers() {
   var images = Array.prototype.slice.call(document.querySelectorAll('img[data-book-cover]'));
   images.forEach(async function(img) {
     var title = img.getAttribute('data-book-cover');
-    if (!title) return;
+    var url = img.getAttribute('data-book-url');
+    var loaded = false;
     try {
-      var res = await fetch('https://www.googleapis.com/books/v1/volumes?q=' + encodeURIComponent('intitle:' + title) + '&maxResults=1');
-      if (!res.ok) return;
-      var data = await res.json();
-      var info = data.items && data.items[0] && data.items[0].volumeInfo;
-      var links = info && info.imageLinks;
-      var cover = links && (links.thumbnail || links.smallThumbnail);
-      if (!cover) return;
-      img.src = cover.replace(/^http:/, 'https:');
-      img.classList.remove('hidden');
+      if (title) {
+        var cleanTitle = title.replace(/[<>\[\]\(\)]/g, ' ').replace(/\s+/g, ' ').trim();
+        var res = await fetch('https://www.googleapis.com/books/v1/volumes?q=' + encodeURIComponent(cleanTitle) + '&maxResults=3');
+        if (res.ok) {
+          var data = await res.json();
+          var items = data.items || [];
+          for (var i = 0; i < items.length; i += 1) {
+            var info = items[i] && items[i].volumeInfo;
+            var links = info && info.imageLinks;
+            var cover = links && (links.thumbnail || links.smallThumbnail);
+            if (cover) {
+              loaded = await showImageWhenLoaded(img, cover.replace(/^http:/, 'https:'));
+              if (loaded) break;
+            }
+          }
+        }
+      }
     } catch(e) {
       console.warn('도서 표지 로드 실패:', e);
+    }
+    if (!loaded && url) {
+      var preview = await getPagePreviewImage(url);
+      await showImageWhenLoaded(img, preview);
     }
   });
 }
@@ -314,7 +364,7 @@ function buildCard(data) {
     thumb = ytId ? '<img class="w-full h-full object-cover" src="https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg" alt="">' : '<div class="w-full h-full flex items-center justify-center bg-warm-sand"><span class="material-symbols-outlined text-6xl text-clay-terracotta opacity-50">smart_display</span></div>';
     badge = '<span class="material-symbols-outlined text-[16px]">smart_display</span>YouTube';
   } else if (type === 'book') {
-    thumb = buildBookThumb(title, image);
+    thumb = buildBookThumb(title, image, url);
     badge = '<span class="material-symbols-outlined text-[16px]">menu_book</span>도서';
   } else {
     thumb = buildPreviewThumb(url, 'event', 'bg-gradient-to-br from-surface-container to-warm-sand');
@@ -526,6 +576,7 @@ function renderCards(cards) {
   renderContentList(cards);
   applyContentFilter();
   hydrateBookCovers();
+  hydratePagePreviews();
   showCardsGrid();
 }
 
