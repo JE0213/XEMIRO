@@ -201,17 +201,61 @@ function buildCard(data) {
   div.innerHTML = '<div class="bg-white rounded-xl border border-warm-sand shadow-sm overflow-hidden h-full flex flex-col hover:shadow-md hover:-translate-y-1 transition-all duration-300"><div class="relative h-[200px] overflow-hidden">' + thumb + '<div class="absolute top-4 left-4 bg-white/90 px-3 py-1 rounded-full text-label-sm text-clay-terracotta flex items-center gap-1">' + badge + '</div></div><div class="p-6 flex-grow flex flex-col justify-between"><div><h3 class="text-headline-md font-headline-md text-deep-charcoal mb-2" style="word-break:keep-all;">' + title + '</h3><p class="text-body-md text-on-surface-variant text-sm line-clamp-2">' + desc + '</p></div>' + (url ? '<a href="' + url + '" target="_blank" class="mt-4 text-primary text-label-sm hover:underline flex items-center">바로가기 <span class="material-symbols-outlined ml-1 text-sm">arrow_outward</span></a>' : '') + '</div></div>';
   return div;
 }
-async function loadCards() {
+var LOCAL_CARDS_KEY = 'xemi-curation-cards';
+
+function getLocalCards() {
+  try {
+    var cards = JSON.parse(localStorage.getItem(LOCAL_CARDS_KEY) || '[]');
+    return Array.isArray(cards) ? cards.filter(function(card) { return card && card.title; }) : [];
+  } catch(e) {
+    return [];
+  }
+}
+
+function cardKey(card) {
+  return [card.type || 'youtube', card.url || '', card.title || ''].join('|').toLowerCase();
+}
+
+function mergeCards(primary, secondary) {
+  var seen = {};
+  var merged = [];
+  (primary || []).concat(secondary || []).forEach(function(card) {
+    if (!card || !card.title) return;
+    var key = cardKey(card);
+    if (seen[key]) return;
+    seen[key] = true;
+    merged.push({
+      type: card.type || 'youtube',
+      url: card.url || '',
+      title: card.title || '',
+      desc: card.desc || ''
+    });
+  });
+  return merged;
+}
+
+function saveLocalCard(card) {
+  localStorage.setItem(LOCAL_CARDS_KEY, JSON.stringify(mergeCards(getLocalCards(), [card])));
+}
+
+function renderCards(cards) {
   var grid = document.getElementById('cards-grid');
+  if (!cards.length) return;
+  grid.innerHTML = '';
+  cards.forEach(function(card) { grid.appendChild(buildCard(card)); });
+}
+
+async function loadCards() {
+  var localCards = getLocalCards();
   try {
     var res = await fetch('/api/cards');
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    var cards = await res.json();
-    if (!Array.isArray(cards) || cards.length === 0) return;
-    grid.innerHTML = '';
-    cards.forEach(function(card) { grid.appendChild(buildCard(card)); });
+    var remoteCards = await res.json();
+    var cards = mergeCards(Array.isArray(remoteCards) ? remoteCards : [], localCards);
+    renderCards(cards);
   } catch(e) {
     console.warn('카드 로드 실패:', e);
+    renderCards(localCards);
   }
 }
 async function addCard() {
@@ -222,21 +266,24 @@ async function addCard() {
   if (!title) { alert('제목을 입력해주세요.'); return; }
   var btn = document.querySelector('#editor-panel button[onclick="addCard()"]');
   if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+  var card = { type: type, url: url, title: title, desc: desc };
   try {
     var res = await fetch('/api/cards', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: type, url: url, title: title, desc: desc })
+      body: JSON.stringify(card)
     });
     if (!res.ok) throw new Error('저장 실패 (' + res.status + ')');
-    document.getElementById('cards-grid').appendChild(buildCard({ type: type, url: url, title: title, desc: desc }));
+  } catch(e) {
+    console.warn('원격 저장 실패:', e);
+    alert('원격 저장 중 오류가 발생해 이 브라우저에 임시 저장했습니다: ' + e.message);
+  } finally {
+    saveLocalCard(card);
+    document.getElementById('cards-grid').appendChild(buildCard(card));
     document.getElementById('e-url').value = '';
     document.getElementById('e-title').value = '';
     document.getElementById('e-desc').value = '';
     document.getElementById('editor-panel').classList.add('hidden');
-  } catch(e) {
-    alert('저장 중 오류가 발생했습니다: ' + e.message);
-  } finally {
     if (btn) { btn.disabled = false; btn.textContent = '등록하기'; }
   }
 }
