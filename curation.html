@@ -109,7 +109,7 @@ nav a { text-decoration: none; }
   <div class="flex flex-wrap justify-end gap-3 mb-6">
     <button id="content-list-toggle" onclick="toggleContentList(true)" class="flex items-center gap-2 px-4 py-2 bg-deep-charcoal text-white rounded-full text-label-sm hover:opacity-80 shadow-sm"><span class="material-symbols-outlined text-[18px]">list_alt</span><span>전체 콘텐츠 목록</span></button>
   </div>
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter" id="cards-grid">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter invisible" id="cards-grid">
     <div data-type="youtube" class="group cursor-pointer md:col-span-2">
       <div class="relative bg-white rounded-xl border border-warm-sand shadow-sm overflow-hidden h-full flex flex-col hover:shadow-md hover:-translate-y-1 transition-all duration-300">
         <div class="relative h-[300px] overflow-hidden"><img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCD4dyHA7vAgMM-BmoAJKUTXXboNn_-NPC10n4fMkeG8df6dtADEEVBBfaByI33y0h68f2qrANCbqf2u76FcU5kqx8NhiNeHuyoxzU6inDYpO8LYtwdLoXO-cD3DLLWYxDIlfaoAdz3I7paUDTm5CpIZgfiNGOg6Pty36f2XM3PkozRP8XJQdsQTweXZbFic5_afLhezVGAvaE9ZN1TU1lC9eDQ6yXJoh6Blv4R8wP1hb_Oxhwievc5nt_2gblcG_YtHHpfI482ix8" alt=""><div class="absolute top-4 left-4 bg-white/90 px-3 py-1 rounded-full text-label-sm text-clay-terracotta flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">smart_display</span>YouTube</div></div>
@@ -443,6 +443,11 @@ function clearContentForm() {
   document.getElementById('e-desc').value = '';
 }
 
+function showCardsGrid() {
+  var grid = document.getElementById('cards-grid');
+  grid.classList.remove('invisible');
+}
+
 function renderCards(cards) {
   var grid = document.getElementById('cards-grid');
   curationCards = cards;
@@ -450,6 +455,7 @@ function renderCards(cards) {
   cards.forEach(function(card) { grid.appendChild(buildCard(card)); });
   renderContentList(cards);
   applyContentFilter();
+  showCardsGrid();
 }
 
 async function loadCards() {
@@ -467,11 +473,14 @@ async function loadCards() {
       curationCards = cards;
       renderContentList(cards);
       applyContentFilter();
+      showCardsGrid();
     }
   } catch(e) {
     console.warn('카드 로드 실패:', e);
     if (localCards.length) {
       renderCards(mergeCards(baseCards, localCards));
+    } else {
+      showCardsGrid();
     }
   }
 }
