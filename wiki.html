@@ -118,6 +118,13 @@ nav a { text-decoration: none; }
       <button onclick="setWikiCat('video',this)" class="px-5 py-2.5 rounded-full bg-surface-container border border-surface-dim text-on-surface-variant text-label-md hover:bg-white hover:border-warm-sand transition-all shadow-sm flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">menu_book</span>콘텐츠 제작</button>
       <button onclick="setWikiCat('common',this)" class="px-5 py-2.5 rounded-full bg-surface-container border border-surface-dim text-on-surface-variant text-label-md hover:bg-white hover:border-warm-sand transition-all shadow-sm flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">work</span>업무 공통</button>
     </div>
+    <div id="category-list" class="hidden w-full bg-white rounded-xl border border-warm-sand p-stack-md shadow-sm">
+      <div class="flex items-center justify-between gap-3 mb-stack-md pb-3 border-b border-warm-sand">
+        <h2 id="category-title" class="text-headline-md font-headline-md text-on-surface flex items-center gap-2"><span class="material-symbols-outlined text-clay-terracotta">format_list_bulleted</span>관련 목록</h2>
+        <span id="category-count" class="text-label-sm text-on-surface-variant bg-surface-container-low px-3 py-1 rounded-full"></span>
+      </div>
+      <div id="category-items" class="grid grid-cols-1 md:grid-cols-2 gap-x-gutter gap-y-3"></div>
+    </div>
     <div class="w-full bg-white rounded-xl border border-warm-sand p-stack-md shadow-sm">
       <h2 class="text-headline-md font-headline-md text-on-surface mb-stack-md flex items-center gap-2"><span class="material-symbols-outlined text-clay-terracotta">trending_up</span>자주 찾는 질문</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-gutter gap-y-4">
@@ -224,13 +231,50 @@ function findAns(q) {
   if (best && bestScore > 0) return { ans: best.ans, src: best.src };
   return { ans: '아직 위키에 등록되지 않은 내용이에요 🙏<br>담당자에게 문의하거나 위키 업데이트 요청을 남겨주세요!', src: null };
 }
-function showAnswer(q) {
-  var r = findAns(q);
+function renderAnswer(r) {
   var area = document.getElementById('answer-area');
   area.classList.remove('hidden');
   document.getElementById('answer-content').innerHTML = r.ans;
   document.getElementById('answer-src').innerHTML = r.src ? '📄 출처: ' + r.src : '';
   setTimeout(function(){area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });},0);
+}
+function showAnswer(q) {
+  renderAnswer(findAns(q));
+}
+function showKbAnswer(index) {
+  var item = KB[index];
+  if (!item) return;
+  document.getElementById('wiki-input').value = getTopicTitle(item);
+  renderAnswer({ ans: item.ans, src: item.src });
+}
+function getTopicTitle(item) {
+  var match = item.ans.match(/<span class="wstag">([^<]+)<\/span>/);
+  return match ? match[1] : item.keys[0];
+}
+function renderCategoryList(cat) {
+  var list = document.getElementById('category-list');
+  var itemsWrap = document.getElementById('category-items');
+  if (!list || !itemsWrap) return;
+  var labels = { hr:'HR · 복리후생', it:'IT · 시스템', video:'콘텐츠 제작', common:'업무 공통', all:'전체' };
+  var items = [];
+  for (var i = 0; i < KB.length; i++) {
+    if ((KB[i].cat || []).indexOf(cat) !== -1) items.push({ item: KB[i], index: i });
+  }
+  document.getElementById('category-title').innerHTML = '<span class="material-symbols-outlined text-clay-terracotta">format_list_bulleted</span>' + (labels[cat] || '관련') + ' 목록';
+  document.getElementById('category-count').textContent = items.length + '개';
+  itemsWrap.innerHTML = items.map(function(entry, idx) {
+    var title = getTopicTitle(entry.item);
+    var src = entry.item.src || '';
+    return '<button type="button" onclick="showKbAnswer(' + entry.index + ')" class="group text-left flex items-start justify-between gap-3 py-3 px-3 rounded-lg border border-transparent hover:border-warm-sand hover:bg-surface-container-low transition-all">'
+      + '<span class="flex items-start gap-3 min-w-0"><span class="text-label-sm text-clay-terracotta bg-surface-container px-2 py-1 rounded-md shrink-0">' + (idx + 1) + '</span>'
+      + '<span class="min-w-0"><span class="block text-body-md text-on-surface group-hover:text-primary transition-colors">' + title + '</span>'
+      + '<span class="block text-label-sm text-on-surface-variant mt-1 truncate">' + src + '</span></span></span>'
+      + '<span class="material-symbols-outlined text-surface-dim group-hover:text-clay-terracotta transition-colors text-[16px] mt-1 shrink-0">arrow_outward</span>'
+      + '</button>';
+  }).join('');
+  list.classList.remove('hidden');
+  document.getElementById('answer-area').classList.add('hidden');
+  setTimeout(function(){list.scrollIntoView({ behavior:'smooth', block:'nearest' });},0);
 }
 function calcLeave(){var input=document.getElementById('join-date').value;if(!input){document.getElementById('leave-result').innerHTML='<span style="color:#c0392b">입사일을 선택해주세요.</span>';return;}var join=new Date(input);var today=new Date();var year=today.getFullYear();var yearEnd=new Date(year,11,31);if(join>today){document.getElementById('leave-result').innerHTML='<span style="color:#c0392b">입사일이 오늘보다 미래입니다.</span>';return;}var joinYear=join.getFullYear();var monthly=0,annual=0,result='';if(joinYear===year){var monthsWorked=Math.floor((yearEnd-join)/(1000*60*60*24*30.44));monthly=Math.min(monthsWorked,11);result='<div style="background:#f5f0ff;border-radius:8px;padding:12px 14px;margin-top:4px;"><strong>'+input+' 입사 기준 '+year+'년 연차</strong><br>📅 월 단위 연차: <strong style="color:#5c2d91">'+monthly+'개</strong><br><span style="color:#888;font-size:11px;">입사 후 매월 만근 시 1일씩 발생 (최대 11개)</span></div>';}else{var yearsWorked=yearEnd.getFullYear()-join.getFullYear();if(yearsWorked<1){annual=11;}else if(yearsWorked<3){annual=15;}else{annual=Math.min(15+Math.floor((yearsWorked-1)/2),25);}result='<div style="background:#f5f0ff;border-radius:8px;padding:12px 14px;margin-top:4px;"><strong>'+input+' 입사 기준 '+year+'년 연차</strong><br>📅 연차 발생일수: <strong style="color:#5c2d91">'+annual+'개</strong><br><span style="color:#888;font-size:11px;">근속 '+yearsWorked+'년차 기준 (근로기준법 제60조)</span></div>';}document.getElementById('leave-result').innerHTML=result;}
 function wikiSearch() {
@@ -245,19 +289,17 @@ function setWikiCat(cat, el) {
   document.querySelectorAll('#cat-chips button').forEach(function(b) {
     b.className = 'px-5 py-2.5 rounded-full bg-surface-container border border-surface-dim text-on-surface-variant text-label-md hover:bg-white hover:border-warm-sand transition-all shadow-sm flex items-center gap-2';
   });
-  el.className = 'px-5 py-2.5 rounded-full bg-primary text-white text-label-md shadow-sm flex items-center gap-2';
-  var chips = CHIPS[cat] || CHIPS.all;
-  document.getElementById('wiki-input').value = chips[0];
-  showAnswer(chips[0]);
+  if (el) el.className = 'px-5 py-2.5 rounded-full bg-primary text-white text-label-md shadow-sm flex items-center gap-2';
+  document.getElementById('wiki-input').value = '';
+  renderCategoryList(cat);
 }
 document.addEventListener('DOMContentLoaded', function() {
   var params = new URLSearchParams(window.location.search);
   var q = params.get('q'), cat = params.get('cat');
   if (q) { document.getElementById('wiki-input').value = q; showAnswer(q); }
   else if (cat) {
-    var chips = CHIPS[cat] || CHIPS.all;
-    document.getElementById('wiki-input').value = chips[0];
-    showAnswer(chips[0]);
+    var btn = document.querySelector('#cat-chips button[onclick*="' + cat + '"]');
+    setWikiCat(cat, btn);
   }
 });
 </script>
