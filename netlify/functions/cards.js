@@ -61,7 +61,7 @@ export const handler = async (event) => {
 
     // ── GET: 카드 목록 반환 ──
     if (event.httpMethod === 'GET') {
-      const res  = await fetch(`${SHEETS}/${sheetId}/values/Sheet1!A2:D`, { headers: auth });
+      const res  = await fetch(`${SHEETS}/${sheetId}/values/시트1!A2:D`, { headers: auth });
       const data = await res.json();
       if (!res.ok) throw new Error(`Sheets GET ${res.status}: ${JSON.stringify(data)}`);
 
@@ -78,7 +78,7 @@ export const handler = async (event) => {
         return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: '제목 필수' }) };
       }
 
-      const range = encodeURIComponent('Sheet1!A:D');
+      const range = encodeURIComponent('시트1!A:D');
       const res = await fetch(
         `${SHEETS}/${sheetId}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
         {
