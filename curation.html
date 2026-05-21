@@ -253,6 +253,38 @@ function buildPreviewThumb(url, icon, className) {
   return '<div class="relative w-full h-full">' + fallback + '<img class="relative z-[1] w-full h-full object-cover" src="' + preview + '" alt="" loading="lazy" onerror="this.style.display=&quot;none&quot;;"></div>';
 }
 
+function escapeAttr(value) {
+  return String(value || '').replace(/[&<>"']/g, function(ch) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+  });
+}
+
+function buildBookThumb(title) {
+  var fallback = buildFallbackThumb('menu_book', 'bg-surface-container');
+  return '<div class="relative w-full h-full">' + fallback + '<img class="hidden relative z-[1] w-full h-full object-contain bg-surface-container p-5" data-book-cover="' + escapeAttr(title) + '" alt="" loading="lazy"></div>';
+}
+
+async function hydrateBookCovers() {
+  var images = Array.prototype.slice.call(document.querySelectorAll('img[data-book-cover]'));
+  images.forEach(async function(img) {
+    var title = img.getAttribute('data-book-cover');
+    if (!title) return;
+    try {
+      var res = await fetch('https://www.googleapis.com/books/v1/volumes?q=' + encodeURIComponent('intitle:' + title) + '&maxResults=1');
+      if (!res.ok) return;
+      var data = await res.json();
+      var info = data.items && data.items[0] && data.items[0].volumeInfo;
+      var links = info && info.imageLinks;
+      var cover = links && (links.thumbnail || links.smallThumbnail);
+      if (!cover) return;
+      img.src = cover.replace(/^http:/, 'https:');
+      img.classList.remove('hidden');
+    } catch(e) {
+      console.warn('도서 표지 로드 실패:', e);
+    }
+  });
+}
+
 function buildCard(data) {
   var type = data.type, url = data.url || '', title = data.title, desc = data.desc || '';
   var div = document.createElement('div');
@@ -264,7 +296,7 @@ function buildCard(data) {
     thumb = ytId ? '<img class="w-full h-full object-cover" src="https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg" alt="">' : '<div class="w-full h-full flex items-center justify-center bg-warm-sand"><span class="material-symbols-outlined text-6xl text-clay-terracotta opacity-50">smart_display</span></div>';
     badge = '<span class="material-symbols-outlined text-[16px]">smart_display</span>YouTube';
   } else if (type === 'book') {
-    thumb = buildPreviewThumb(url, 'menu_book', 'bg-surface-container');
+    thumb = buildBookThumb(title);
     badge = '<span class="material-symbols-outlined text-[16px]">menu_book</span>도서';
   } else {
     thumb = buildPreviewThumb(url, 'event', 'bg-gradient-to-br from-surface-container to-warm-sand');
@@ -472,6 +504,7 @@ function renderCards(cards) {
   cards.forEach(function(card) { grid.appendChild(buildCard(card)); });
   renderContentList(cards);
   applyContentFilter();
+  hydrateBookCovers();
   showCardsGrid();
 }
 
