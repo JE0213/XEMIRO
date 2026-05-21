@@ -207,6 +207,7 @@ async function loadCards() {
     var res = await fetch('/api/cards');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var cards = await res.json();
+    if (!Array.isArray(cards) || cards.length === 0) return;
     grid.innerHTML = '';
     cards.forEach(function(card) { grid.appendChild(buildCard(card)); });
   } catch(e) {
