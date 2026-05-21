@@ -243,6 +243,8 @@ function getLinkPreviewImage(url) {
   return 'https://api.microlink.io/?url=' + encodeURIComponent(url) + '&screenshot=true&embed=screenshot.url';
 }
 
+var SEMINAR_FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1515187029135-18ee286d815b?w=900&q=80';
+
 function buildFallbackThumb(icon, className) {
   return '<div class="absolute inset-0 flex items-center justify-center ' + className + '"><span class="material-symbols-outlined text-6xl text-primary opacity-35">' + icon + '</span></div>';
 }
@@ -367,7 +369,7 @@ function buildCard(data) {
     thumb = buildBookThumb(title, image, url);
     badge = '<span class="material-symbols-outlined text-[16px]">menu_book</span>도서';
   } else {
-    thumb = buildPreviewThumb(url, 'event', 'bg-gradient-to-br from-surface-container to-warm-sand');
+    thumb = buildImageThumb(SEMINAR_FALLBACK_IMAGE, 'event', 'bg-surface-container', 'object-cover');
     badge = '<span class="material-symbols-outlined text-[16px]">event</span>세미나';
   }
   div.innerHTML = '<div class="bg-white rounded-xl border border-warm-sand shadow-sm overflow-hidden h-full flex flex-col hover:shadow-md hover:-translate-y-1 transition-all duration-300"><div class="relative h-[200px] overflow-hidden">' + thumb + '<div class="absolute top-4 left-4 bg-white/90 px-3 py-1 rounded-full text-label-sm text-clay-terracotta flex items-center gap-1">' + badge + '</div></div><div class="p-6 flex-grow flex flex-col justify-between"><div><h3 class="text-headline-md font-headline-md text-deep-charcoal mb-2" style="word-break:keep-all;">' + title + '</h3><p class="text-body-md text-on-surface-variant text-sm line-clamp-2">' + desc + '</p></div>' + (url ? '<a href="' + url + '" target="_blank" class="mt-4 text-primary text-label-sm hover:underline flex items-center">바로가기 <span class="material-symbols-outlined ml-1 text-sm">arrow_outward</span></a>' : '') + '</div></div>';

@@ -289,11 +289,36 @@
     return 'smart_display';
   }
 
+  var SEMINAR_FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1515187029135-18ee286d815b?w=900&q=80';
+
   function getThumb(card) {
     if (card.image) return card.image;
+    if (card.type === 'seminar') return SEMINAR_FALLBACK_IMAGE;
     var ytId = card.type === 'youtube' ? getYtId(card.url) : '';
     if (ytId) return 'https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg';
     return '';
+  }
+
+  function pickDiverseCurationCards(cards) {
+    var normalized = (cards || []).filter(function(card) { return card && card.title; }).reverse();
+    var picked = [];
+    var seen = {};
+    ['youtube', 'book', 'seminar'].forEach(function(type) {
+      var found = normalized.find(function(card) {
+        return (card.type || 'youtube') === type && !seen[(card.type || 'youtube') + '|' + card.url + '|' + card.title];
+      });
+      if (found) {
+        picked.push(found);
+        seen[(found.type || 'youtube') + '|' + found.url + '|' + found.title] = true;
+      }
+    });
+    normalized.forEach(function(card) {
+      var key = (card.type || 'youtube') + '|' + card.url + '|' + card.title;
+      if (picked.length >= 3 || seen[key]) return;
+      picked.push(card);
+      seen[key] = true;
+    });
+    return picked;
   }
 
   function buildHomeCurationCard(card, index) {
@@ -319,7 +344,7 @@
       var res = await fetch('/api/cards');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var cards = await res.json();
-      cards = Array.isArray(cards) ? cards.filter(function(card) { return card && card.title; }).slice(-3).reverse() : [];
+      cards = Array.isArray(cards) ? pickDiverseCurationCards(cards) : [];
       if (!cards.length) throw new Error('empty');
       grid.innerHTML = cards.map(buildHomeCurationCard).join('');
     } catch(e) {
