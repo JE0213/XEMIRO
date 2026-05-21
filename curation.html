@@ -107,7 +107,7 @@ nav a { text-decoration: none; }
     <button onclick="filterCards('seminar',this)" class="px-6 py-2 rounded-full bg-warm-sand text-deep-charcoal text-label-md shadow-sm border border-transparent transition-all">세미나</button>
   </div>
   <div class="flex flex-wrap justify-end gap-3 mb-6">
-    <button id="content-list-toggle" onclick="toggleContentList()" class="flex items-center gap-2 px-4 py-2 bg-warm-sand text-deep-charcoal rounded-full text-label-sm hover:opacity-80 shadow-sm"><span class="material-symbols-outlined text-[18px]">list_alt</span><span id="content-list-toggle-label">누적 콘텐츠 보기</span></button>
+    <button id="content-list-toggle" onclick="toggleContentList(true)" class="flex items-center gap-2 px-4 py-2 bg-warm-sand text-deep-charcoal rounded-full text-label-sm hover:opacity-80 shadow-sm"><span class="material-symbols-outlined text-[18px]">list_alt</span><span>콘텐츠 관리</span></button>
     <button onclick="toggleEditor()" class="flex items-center gap-2 px-4 py-2 bg-deep-charcoal text-white rounded-full text-label-sm hover:opacity-80 shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span>콘텐츠 추가</button>
   </div>
   <div id="editor-panel" class="hidden mb-8 bg-white rounded-xl border border-warm-sand shadow-sm p-6 space-y-4">
@@ -143,16 +143,22 @@ nav a { text-decoration: none; }
       </div>
     </div>
   </div>
-  <section class="hidden mt-10 border-t border-warm-sand pt-8" id="content-list-section">
-    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
-      <div>
-        <h2 class="text-headline-md font-headline-md text-deep-charcoal">전체 콘텐츠 목록</h2>
-        <p class="text-body-md text-on-surface-variant text-sm mt-1">등록된 콘텐츠를 유형별로 함께 확인할 수 있습니다.</p>
+  <div id="content-list-modal" class="hidden fixed inset-0 z-[190] bg-black/45 items-center justify-center px-4">
+    <div class="bg-white rounded-xl border border-warm-sand shadow-xl w-full max-w-4xl max-h-[82vh] flex flex-col overflow-hidden">
+      <div class="flex items-start justify-between gap-4 p-5 border-b border-warm-sand">
+        <div>
+          <h2 class="text-headline-md font-headline-md text-deep-charcoal">누적 콘텐츠</h2>
+          <p class="text-body-md text-on-surface-variant text-sm mt-1">등록된 콘텐츠를 확인하고 삭제할 수 있습니다.</p>
+        </div>
+        <button onclick="toggleContentList(false)" class="w-10 h-10 rounded-full bg-warm-sand text-deep-charcoal flex items-center justify-center hover:opacity-80" aria-label="닫기"><span class="material-symbols-outlined">close</span></button>
       </div>
-      <div id="content-count" class="text-label-sm text-on-surface-variant"></div>
+      <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-warm-sand bg-surface-container">
+        <div id="content-count" class="text-label-sm text-on-surface-variant"></div>
+        <button onclick="loadCards()" class="flex items-center gap-1 text-label-sm text-primary hover:underline"><span class="material-symbols-outlined text-[18px]">refresh</span>새로고침</button>
+      </div>
+      <div id="content-list" class="divide-y divide-warm-sand overflow-y-auto"></div>
     </div>
-    <div id="content-list" class="divide-y divide-warm-sand border border-warm-sand rounded-xl bg-white overflow-hidden"></div>
-  </section>
+  </div>
 <div id="pw-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:16px;padding:32px 28px;width:360px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.18);display:flex;flex-direction:column;gap:16px;">
     <p style="font-size:15px;color:#2D2926;line-height:1.6;margin:0;">관리자 전용 기능입니다.<br>비밀번호를 입력해주세요.</p>
@@ -170,14 +176,13 @@ function closeEditor() { document.getElementById('editor-panel').classList.add('
 var activeFilter = 'all';
 var curationCards = [];
 
-function toggleContentList() {
-  var section = document.getElementById('content-list-section');
-  var label = document.getElementById('content-list-toggle-label');
-  section.classList.toggle('hidden');
-  label.textContent = section.classList.contains('hidden') ? '누적 콘텐츠 보기' : '누적 콘텐츠 닫기';
-  if (!section.classList.contains('hidden')) {
+function toggleContentList(open) {
+  var modal = document.getElementById('content-list-modal');
+  var shouldOpen = typeof open === 'boolean' ? open : modal.classList.contains('hidden');
+  modal.classList.toggle('hidden', !shouldOpen);
+  modal.classList.toggle('flex', shouldOpen);
+  if (shouldOpen) {
     renderContentList(curationCards);
-    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
@@ -242,7 +247,14 @@ function typeLabel(type) {
   return 'YouTube';
 }
 
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, function(ch) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+  });
+}
+
 function readInitialCards() {
+  var deleted = getDeletedCardKeys();
   return Array.prototype.slice.call(document.querySelectorAll('#cards-grid > [data-type]')).map(function(card) {
     var title = card.querySelector('h3');
     var desc = card.querySelector('p');
@@ -253,10 +265,11 @@ function readInitialCards() {
       title: title ? title.textContent.trim() : '',
       desc: desc ? desc.textContent.trim() : ''
     };
-  }).filter(function(card) { return card.title; });
+  }).filter(function(card) { return card.title && deleted.indexOf(cardKey(card)) === -1; });
 }
 
 var LOCAL_CARDS_KEY = 'xemi-curation-cards';
+var DELETED_CARDS_KEY = 'xemi-curation-deleted-cards';
 
 function getLocalCards() {
   try {
@@ -265,6 +278,29 @@ function getLocalCards() {
   } catch(e) {
     return [];
   }
+}
+
+function getDeletedCardKeys() {
+  try {
+    var keys = JSON.parse(localStorage.getItem(DELETED_CARDS_KEY) || '[]');
+    return Array.isArray(keys) ? keys : [];
+  } catch(e) {
+    return [];
+  }
+}
+
+function saveDeletedCardKey(card) {
+  var keys = getDeletedCardKeys();
+  var key = cardKey(card);
+  if (keys.indexOf(key) === -1) keys.push(key);
+  localStorage.setItem(DELETED_CARDS_KEY, JSON.stringify(keys));
+}
+
+function removeLocalCard(card) {
+  var target = cardKey(card);
+  localStorage.setItem(LOCAL_CARDS_KEY, JSON.stringify(getLocalCards().filter(function(item) {
+    return cardKey(item) !== target;
+  })));
 }
 
 function cardKey(card) {
@@ -280,6 +316,7 @@ function mergeCards(primary, secondary) {
     if (seen[key]) return;
     seen[key] = true;
     merged.push({
+      rowNumber: card.rowNumber,
       type: card.type || 'youtube',
       url: card.url || '',
       title: card.title || '',
@@ -296,8 +333,8 @@ function saveLocalCard(card) {
 function buildContentRow(card) {
   var row = document.createElement('div');
   row.dataset.type = card.type || 'youtube';
-  row.className = 'flex flex-col md:flex-row md:items-center gap-2 md:gap-4 p-4';
-  row.innerHTML = '<div class="md:w-28 shrink-0 text-label-sm text-clay-terracotta">' + typeLabel(card.type) + '</div><div class="flex-1 min-w-0"><div class="text-body-md text-deep-charcoal font-medium" style="word-break:keep-all;">' + card.title + '</div><div class="text-body-md text-on-surface-variant text-sm line-clamp-1">' + (card.desc || '') + '</div></div>' + (card.url ? '<a href="' + card.url + '" target="_blank" class="text-primary text-label-sm hover:underline flex items-center shrink-0">열기 <span class="material-symbols-outlined ml-1 text-sm">arrow_outward</span></a>' : '');
+  row.className = 'flex flex-col md:flex-row md:items-center gap-3 md:gap-4 p-4';
+  row.innerHTML = '<div class="md:w-24 shrink-0 text-label-sm text-clay-terracotta">' + typeLabel(card.type) + '</div><div class="flex-1 min-w-0"><div class="text-body-md text-deep-charcoal font-medium" style="word-break:keep-all;">' + escapeHtml(card.title) + '</div><div class="text-body-md text-on-surface-variant text-sm line-clamp-1">' + escapeHtml(card.desc || '') + '</div></div><div class="flex items-center gap-2 shrink-0">' + (card.url ? '<a href="' + escapeHtml(card.url) + '" target="_blank" class="text-primary text-label-sm hover:underline flex items-center">열기 <span class="material-symbols-outlined ml-1 text-sm">arrow_outward</span></a>' : '<span class="text-label-sm text-on-surface-variant">링크 없음</span>') + '<button onclick="deleteCard(' + JSON.stringify(card).replace(/"/g, '&quot;') + ')" class="w-9 h-9 rounded-full bg-warm-sand text-deep-charcoal flex items-center justify-center hover:opacity-80" aria-label="삭제"><span class="material-symbols-outlined text-[18px]">delete</span></button></div>';
   return row;
 }
 
@@ -321,9 +358,30 @@ function updateContentCount() {
   count.textContent = activeFilter === 'all' ? '총 ' + total + '개' : typeLabel(activeFilter) + ' ' + visible + '개 / 총 ' + total + '개';
 }
 
+async function deleteCard(card) {
+  if (!confirm('이 콘텐츠를 삭제할까요?')) return;
+  try {
+    if (card.rowNumber) {
+      var res = await fetch('/api/cards?row=' + encodeURIComponent(card.rowNumber), { method: 'DELETE' });
+      if (!res.ok) throw new Error('삭제 실패 (' + res.status + ')');
+      removeLocalCard(card);
+      curationCards = curationCards.filter(function(item) { return cardKey(item) !== cardKey(card); });
+      renderCards(curationCards);
+      await loadCards();
+      return;
+    } else {
+      saveDeletedCardKey(card);
+    }
+    removeLocalCard(card);
+    curationCards = curationCards.filter(function(item) { return cardKey(item) !== cardKey(card); });
+    renderCards(curationCards);
+  } catch(e) {
+    alert('삭제 중 오류가 발생했습니다: ' + e.message);
+  }
+}
+
 function renderCards(cards) {
   var grid = document.getElementById('cards-grid');
-  if (!cards.length) return;
   curationCards = cards;
   grid.innerHTML = '';
   cards.forEach(function(card) { grid.appendChild(buildCard(card)); });
@@ -332,14 +390,14 @@ function renderCards(cards) {
 }
 
 async function loadCards() {
-  var baseCards = curationCards.length ? curationCards : readInitialCards();
+  var baseCards = readInitialCards();
   var localCards = getLocalCards();
   try {
     var res = await fetch('/api/cards');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var remoteCards = await res.json();
     var remoteList = Array.isArray(remoteCards) ? remoteCards : [];
-    var cards = mergeCards(baseCards, mergeCards(remoteList, localCards));
+    var cards = mergeCards(mergeCards(remoteList, localCards), baseCards);
     if (remoteList.length || localCards.length) {
       renderCards(cards);
     } else {
@@ -360,9 +418,11 @@ async function addCard() {
   var title = document.getElementById('e-title').value.trim();
   var desc  = document.getElementById('e-desc').value.trim();
   if (!title) { alert('제목을 입력해주세요.'); return; }
+  if (!url) { alert('연결 링크를 입력해주세요.'); return; }
   var btn = document.querySelector('#editor-panel button[onclick="addCard()"]');
   if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
   var card = { type: type, url: url, title: title, desc: desc };
+  var savedRemote = false;
   try {
     var res = await fetch('/api/cards', {
       method: 'POST',
@@ -370,12 +430,17 @@ async function addCard() {
       body: JSON.stringify(card)
     });
     if (!res.ok) throw new Error('저장 실패 (' + res.status + ')');
+    savedRemote = true;
   } catch(e) {
     console.warn('원격 저장 실패:', e);
     alert('원격 저장 중 오류가 발생해 이 브라우저에 임시 저장했습니다: ' + e.message);
   } finally {
     saveLocalCard(card);
-    renderCards(mergeCards(curationCards, [card]));
+    if (savedRemote) {
+      await loadCards();
+    } else {
+      renderCards(mergeCards(curationCards, [card]));
+    }
     document.getElementById('e-url').value = '';
     document.getElementById('e-title').value = '';
     document.getElementById('e-desc').value = '';

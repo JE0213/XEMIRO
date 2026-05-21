@@ -3,6 +3,7 @@ import { createSign } from 'crypto';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
   'Content-Type': 'application/json',
 };
 
@@ -59,23 +60,24 @@ export const handler = async (event) => {
     const token = await getAccessToken(creds);
     const auth  = { Authorization: `Bearer ${token}` };
 
-    // ── GET: 카드 목록 반환 ──
     if (event.httpMethod === 'GET') {
-      const res  = await fetch(`${SHEETS}/${sheetId}/values/시트1!A2:D`, { headers: auth });
+      const res  = await fetch(`${SHEETS}/${sheetId}/values/시트1!A1:D`, { headers: auth });
       const data = await res.json();
       if (!res.ok) throw new Error(`Sheets GET ${res.status}: ${JSON.stringify(data)}`);
 
       const cards = (data.values || [])
-        .filter(r => r[2])
-        .map(r => ({ type: r[0] || 'youtube', url: r[1] || '', title: r[2] || '', desc: r[3] || '' }));
+        .map((r, i) => ({ rowNumber: i + 1, type: r[0] || 'youtube', url: r[1] || '', title: r[2] || '', desc: r[3] || '' }))
+        .filter(card => card.title && card.title.toLowerCase() !== 'title');
       return { statusCode: 200, headers: CORS, body: JSON.stringify(cards) };
     }
 
-    // ── POST: 카드 추가 ──
     if (event.httpMethod === 'POST') {
       const { type, url, title, desc } = JSON.parse(event.body || '{}');
       if (!title) {
         return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: '제목 필수' }) };
+      }
+      if (!url) {
+        return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'URL 필수' }) };
       }
 
       const range = encodeURIComponent('시트1!A:D');
@@ -89,6 +91,36 @@ export const handler = async (event) => {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(`Sheets POST ${res.status}: ${JSON.stringify(data)}`);
+      return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true }) };
+    }
+
+    if (event.httpMethod === 'DELETE') {
+      const params = new URLSearchParams(event.rawQuery || '');
+      const body = event.body ? JSON.parse(event.body) : {};
+      const rowNumber = Number(event.queryStringParameters?.row || params.get('row') || body.rowNumber);
+      if (!Number.isInteger(rowNumber) || rowNumber < 1) {
+        return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: '삭제할 행 번호가 올바르지 않습니다' }) };
+      }
+
+      const tabId = Number(process.env.GOOGLE_SHEET_TAB_ID || 0);
+      const res = await fetch(`${SHEETS}/${sheetId}:batchUpdate`, {
+        method: 'POST',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{
+            deleteDimension: {
+              range: {
+                sheetId: tabId,
+                dimension: 'ROWS',
+                startIndex: rowNumber - 1,
+                endIndex: rowNumber,
+              },
+            },
+          }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(`Sheets DELETE ${res.status}: ${JSON.stringify(data)}`);
       return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true }) };
     }
 
