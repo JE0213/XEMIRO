@@ -106,7 +106,8 @@ nav a { text-decoration: none; }
     <button onclick="filterCards('book',this)" class="px-6 py-2 rounded-full bg-warm-sand text-deep-charcoal text-label-md shadow-sm border border-transparent transition-all">도서</button>
     <button onclick="filterCards('seminar',this)" class="px-6 py-2 rounded-full bg-warm-sand text-deep-charcoal text-label-md shadow-sm border border-transparent transition-all">세미나</button>
   </div>
-  <div class="flex justify-end mb-6">
+  <div class="flex flex-wrap justify-end gap-3 mb-6">
+    <button id="content-list-toggle" onclick="toggleContentList()" class="flex items-center gap-2 px-4 py-2 bg-warm-sand text-deep-charcoal rounded-full text-label-sm hover:opacity-80 shadow-sm"><span class="material-symbols-outlined text-[18px]">list_alt</span><span id="content-list-toggle-label">누적 콘텐츠 보기</span></button>
     <button onclick="toggleEditor()" class="flex items-center gap-2 px-4 py-2 bg-deep-charcoal text-white rounded-full text-label-sm hover:opacity-80 shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span>콘텐츠 추가</button>
   </div>
   <div id="editor-panel" class="hidden mb-8 bg-white rounded-xl border border-warm-sand shadow-sm p-6 space-y-4">
@@ -142,6 +143,16 @@ nav a { text-decoration: none; }
       </div>
     </div>
   </div>
+  <section class="hidden mt-10 border-t border-warm-sand pt-8" id="content-list-section">
+    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-headline-md font-headline-md text-deep-charcoal">전체 콘텐츠 목록</h2>
+        <p class="text-body-md text-on-surface-variant text-sm mt-1">등록된 콘텐츠를 유형별로 함께 확인할 수 있습니다.</p>
+      </div>
+      <div id="content-count" class="text-label-sm text-on-surface-variant"></div>
+    </div>
+    <div id="content-list" class="divide-y divide-warm-sand border border-warm-sand rounded-xl bg-white overflow-hidden"></div>
+  </section>
 <div id="pw-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:16px;padding:32px 28px;width:360px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.18);display:flex;flex-direction:column;gap:16px;">
     <p style="font-size:15px;color:#2D2926;line-height:1.6;margin:0;">관리자 전용 기능입니다.<br>비밀번호를 입력해주세요.</p>
@@ -156,6 +167,20 @@ nav a { text-decoration: none; }
 <script>
 function toggleEditor() { document.getElementById('pw-modal').style.display='flex'; document.getElementById('pw-input').value=''; setTimeout(function(){document.getElementById('pw-input').focus();},50); }
 function closeEditor() { document.getElementById('editor-panel').classList.add('hidden'); }
+var activeFilter = 'all';
+var curationCards = [];
+
+function toggleContentList() {
+  var section = document.getElementById('content-list-section');
+  var label = document.getElementById('content-list-toggle-label');
+  section.classList.toggle('hidden');
+  label.textContent = section.classList.contains('hidden') ? '누적 콘텐츠 보기' : '누적 콘텐츠 닫기';
+  if (!section.classList.contains('hidden')) {
+    renderContentList(curationCards);
+    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
 function checkPassword() {
   var pw = document.getElementById('pw-input').value;
   if (pw === 'xemi2026') {
@@ -169,13 +194,22 @@ function checkPassword() {
   }
 }
 function filterCards(type, btn) {
+  activeFilter = type;
   document.querySelectorAll('#filter-chips button').forEach(function(b) {
     b.className = 'px-6 py-2 rounded-full bg-warm-sand text-deep-charcoal text-label-md shadow-sm border border-transparent transition-all';
   });
   btn.className = 'px-6 py-2 rounded-full bg-clay-terracotta text-white text-label-md shadow-sm';
+  applyContentFilter();
+}
+
+function applyContentFilter() {
   document.querySelectorAll('#cards-grid [data-type]').forEach(function(c) {
-    c.style.display = (type === 'all' || c.dataset.type === type) ? '' : 'none';
+    c.style.display = (activeFilter === 'all' || c.dataset.type === activeFilter) ? '' : 'none';
   });
+  document.querySelectorAll('#content-list [data-type]').forEach(function(row) {
+    row.style.display = (activeFilter === 'all' || row.dataset.type === activeFilter) ? '' : 'none';
+  });
+  updateContentCount();
 }
 function getYtId(url) {
   var m = url.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
@@ -201,6 +235,27 @@ function buildCard(data) {
   div.innerHTML = '<div class="bg-white rounded-xl border border-warm-sand shadow-sm overflow-hidden h-full flex flex-col hover:shadow-md hover:-translate-y-1 transition-all duration-300"><div class="relative h-[200px] overflow-hidden">' + thumb + '<div class="absolute top-4 left-4 bg-white/90 px-3 py-1 rounded-full text-label-sm text-clay-terracotta flex items-center gap-1">' + badge + '</div></div><div class="p-6 flex-grow flex flex-col justify-between"><div><h3 class="text-headline-md font-headline-md text-deep-charcoal mb-2" style="word-break:keep-all;">' + title + '</h3><p class="text-body-md text-on-surface-variant text-sm line-clamp-2">' + desc + '</p></div>' + (url ? '<a href="' + url + '" target="_blank" class="mt-4 text-primary text-label-sm hover:underline flex items-center">바로가기 <span class="material-symbols-outlined ml-1 text-sm">arrow_outward</span></a>' : '') + '</div></div>';
   return div;
 }
+
+function typeLabel(type) {
+  if (type === 'book') return '도서';
+  if (type === 'seminar') return '세미나';
+  return 'YouTube';
+}
+
+function readInitialCards() {
+  return Array.prototype.slice.call(document.querySelectorAll('#cards-grid > [data-type]')).map(function(card) {
+    var title = card.querySelector('h3');
+    var desc = card.querySelector('p');
+    var link = card.querySelector('a[href]');
+    return {
+      type: card.dataset.type || 'youtube',
+      url: link ? link.href : '',
+      title: title ? title.textContent.trim() : '',
+      desc: desc ? desc.textContent.trim() : ''
+    };
+  }).filter(function(card) { return card.title; });
+}
+
 var LOCAL_CARDS_KEY = 'xemi-curation-cards';
 
 function getLocalCards() {
@@ -238,24 +293,65 @@ function saveLocalCard(card) {
   localStorage.setItem(LOCAL_CARDS_KEY, JSON.stringify(mergeCards(getLocalCards(), [card])));
 }
 
+function buildContentRow(card) {
+  var row = document.createElement('div');
+  row.dataset.type = card.type || 'youtube';
+  row.className = 'flex flex-col md:flex-row md:items-center gap-2 md:gap-4 p-4';
+  row.innerHTML = '<div class="md:w-28 shrink-0 text-label-sm text-clay-terracotta">' + typeLabel(card.type) + '</div><div class="flex-1 min-w-0"><div class="text-body-md text-deep-charcoal font-medium" style="word-break:keep-all;">' + card.title + '</div><div class="text-body-md text-on-surface-variant text-sm line-clamp-1">' + (card.desc || '') + '</div></div>' + (card.url ? '<a href="' + card.url + '" target="_blank" class="text-primary text-label-sm hover:underline flex items-center shrink-0">열기 <span class="material-symbols-outlined ml-1 text-sm">arrow_outward</span></a>' : '');
+  return row;
+}
+
+function renderContentList(cards) {
+  var list = document.getElementById('content-list');
+  list.innerHTML = '';
+  if (!cards.length) {
+    list.innerHTML = '<div class="p-4 text-body-md text-on-surface-variant text-sm">등록된 콘텐츠가 없습니다.</div>';
+    updateContentCount();
+    return;
+  }
+  cards.forEach(function(card) { list.appendChild(buildContentRow(card)); });
+  applyContentFilter();
+}
+
+function updateContentCount() {
+  var count = document.getElementById('content-count');
+  if (!count) return;
+  var total = curationCards.length;
+  var visible = activeFilter === 'all' ? total : curationCards.filter(function(card) { return card.type === activeFilter; }).length;
+  count.textContent = activeFilter === 'all' ? '총 ' + total + '개' : typeLabel(activeFilter) + ' ' + visible + '개 / 총 ' + total + '개';
+}
+
 function renderCards(cards) {
   var grid = document.getElementById('cards-grid');
   if (!cards.length) return;
+  curationCards = cards;
   grid.innerHTML = '';
   cards.forEach(function(card) { grid.appendChild(buildCard(card)); });
+  renderContentList(cards);
+  applyContentFilter();
 }
 
 async function loadCards() {
+  var baseCards = curationCards.length ? curationCards : readInitialCards();
   var localCards = getLocalCards();
   try {
     var res = await fetch('/api/cards');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var remoteCards = await res.json();
-    var cards = mergeCards(Array.isArray(remoteCards) ? remoteCards : [], localCards);
-    renderCards(cards);
+    var remoteList = Array.isArray(remoteCards) ? remoteCards : [];
+    var cards = mergeCards(baseCards, mergeCards(remoteList, localCards));
+    if (remoteList.length || localCards.length) {
+      renderCards(cards);
+    } else {
+      curationCards = cards;
+      renderContentList(cards);
+      applyContentFilter();
+    }
   } catch(e) {
     console.warn('카드 로드 실패:', e);
-    renderCards(localCards);
+    if (localCards.length) {
+      renderCards(mergeCards(baseCards, localCards));
+    }
   }
 }
 async function addCard() {
@@ -279,7 +375,7 @@ async function addCard() {
     alert('원격 저장 중 오류가 발생해 이 브라우저에 임시 저장했습니다: ' + e.message);
   } finally {
     saveLocalCard(card);
-    document.getElementById('cards-grid').appendChild(buildCard(card));
+    renderCards(mergeCards(curationCards, [card]));
     document.getElementById('e-url').value = '';
     document.getElementById('e-title').value = '';
     document.getElementById('e-desc').value = '';
@@ -287,6 +383,10 @@ async function addCard() {
     if (btn) { btn.disabled = false; btn.textContent = '등록하기'; }
   }
 }
-document.addEventListener('DOMContentLoaded', loadCards);
+document.addEventListener('DOMContentLoaded', function() {
+  curationCards = readInitialCards();
+  renderContentList(curationCards);
+  loadCards();
+});
 </script>
 </body></html>
