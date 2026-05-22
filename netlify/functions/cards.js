@@ -8,6 +8,7 @@ const CORS = {
 };
 
 const SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets';
+const DEFAULT_SHEET_NAMES = ['시트1', 'Sheet1'];
 
 async function getAccessToken(creds) {
   const now = Math.floor(Date.now() / 1000);
@@ -38,6 +39,141 @@ async function getAccessToken(creds) {
   return json.access_token;
 }
 
+function unique(values) {
+  const seen = {};
+  return values.filter((value) => {
+    if (!value || seen[value]) return false;
+    seen[value] = true;
+    return true;
+  });
+}
+
+function normalizeHeader(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function findHeaderIndex(headers, names) {
+  const normalizedNames = names.map(normalizeHeader);
+  return headers.findIndex((header) => normalizedNames.includes(normalizeHeader(header)));
+}
+
+function looksLikeHeader(row) {
+  const normalized = row.map(normalizeHeader);
+  return ['type', 'url', 'title', '제목', '링크'].some((name) => normalized.includes(normalizeHeader(name)));
+}
+
+function looksLikeUrl(value) {
+  return /^https?:\/\//i.test(String(value || '').trim());
+}
+
+function normalizeType(value) {
+  const type = normalizeHeader(value);
+  if (['book', '도서'].includes(type)) return 'book';
+  if (['seminar', '세미나', 'event', '행사'].includes(type)) return 'seminar';
+  return 'youtube';
+}
+
+function rowToCard(row, rowNumber, headerMap) {
+  let card;
+  if (headerMap) {
+    card = {
+      rowNumber,
+      type: normalizeType(row[headerMap.type] || ''),
+      url: row[headerMap.url] || '',
+      title: row[headerMap.title] || '',
+      desc: row[headerMap.desc] || '',
+      image: row[headerMap.image] || '',
+    };
+  } else {
+    card = {
+      rowNumber,
+      type: normalizeType(row[0] || ''),
+      url: row[1] || '',
+      title: row[2] || '',
+      desc: row[3] || '',
+      image: row[4] || '',
+    };
+
+    if (!card.title && row[0] && looksLikeUrl(row[1])) {
+      card = {
+        rowNumber,
+        type: normalizeType(row[3] || ''),
+        url: row[1] || '',
+        title: row[0] || '',
+        desc: row[2] || '',
+        image: row[4] || '',
+      };
+    }
+  }
+
+  card.url = String(card.url || '').trim();
+  card.title = String(card.title || '').trim();
+  card.desc = String(card.desc || '').trim();
+  card.image = String(card.image || '').trim();
+  return card;
+}
+
+function valuesToCards(values) {
+  if (!Array.isArray(values) || !values.length) return [];
+
+  const firstRow = values[0] || [];
+  const hasHeader = looksLikeHeader(firstRow);
+  let headerMap = null;
+  let startIndex = 0;
+
+  if (hasHeader) {
+    headerMap = {
+      type: findHeaderIndex(firstRow, ['type', '유형', '분류', '카테고리']),
+      url: findHeaderIndex(firstRow, ['url', 'link', '링크', '주소']),
+      title: findHeaderIndex(firstRow, ['title', '제목']),
+      desc: findHeaderIndex(firstRow, ['desc', 'description', '요약', '설명', '내용']),
+      image: findHeaderIndex(firstRow, ['image', 'thumbnail', '썸네일', '이미지']),
+    };
+    if (headerMap.title === -1) return [];
+    startIndex = 1;
+  }
+
+  return values.slice(startIndex)
+    .map((row, index) => rowToCard(row || [], startIndex + index + 1, headerMap))
+    .filter((card) => card.title && !['title', '제목'].includes(normalizeHeader(card.title)));
+}
+
+async function getSheetNames(sheetId, auth) {
+  const res = await fetch(`${SHEETS}/${sheetId}?fields=sheets.properties.title`, { headers: auth });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Sheets metadata ${res.status}: ${JSON.stringify(data)}`);
+  return (data.sheets || []).map((sheet) => sheet.properties.title);
+}
+
+async function readCardsFromSheet(sheetId, auth, sheetName) {
+  const res = await fetch(`${SHEETS}/${sheetId}/values/${encodeURIComponent(sheetName + '!A1:Z')}`, {
+    headers: auth,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Sheets GET ${sheetName} ${res.status}: ${JSON.stringify(data)}`);
+  return valuesToCards(data.values || []);
+}
+
+async function readCards(sheetId, auth) {
+  const preferred = process.env.GOOGLE_SHEET_NAME || '';
+  const sheetNames = await getSheetNames(sheetId, auth);
+  const candidates = unique([preferred, ...DEFAULT_SHEET_NAMES, ...sheetNames]);
+  let lastError = null;
+  let bestCards = [];
+
+  for (const sheetName of candidates) {
+    try {
+      const cards = await readCardsFromSheet(sheetId, auth, sheetName);
+      if (cards.length > bestCards.length) bestCards = cards;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (lastError && !sheetNames.length) throw lastError;
+  return bestCards;
+}
+
 export const handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS, body: '' };
@@ -61,13 +197,7 @@ export const handler = async (event) => {
     const auth  = { Authorization: `Bearer ${token}` };
 
     if (event.httpMethod === 'GET') {
-      const res  = await fetch(`${SHEETS}/${sheetId}/values/시트1!A1:E`, { headers: auth });
-      const data = await res.json();
-      if (!res.ok) throw new Error(`Sheets GET ${res.status}: ${JSON.stringify(data)}`);
-
-      const cards = (data.values || [])
-        .map((r, i) => ({ rowNumber: i + 1, type: r[0] || 'youtube', url: r[1] || '', title: r[2] || '', desc: r[3] || '', image: r[4] || '' }))
-        .filter(card => card.title && card.title.toLowerCase() !== 'title');
+      const cards = await readCards(sheetId, auth);
       return { statusCode: 200, headers: CORS, body: JSON.stringify(cards) };
     }
 
@@ -80,7 +210,8 @@ export const handler = async (event) => {
         return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'URL 필수' }) };
       }
 
-      const range = encodeURIComponent('시트1!A:E');
+      const sheetName = process.env.GOOGLE_SHEET_NAME || '시트1';
+      const range = encodeURIComponent(sheetName + '!A:E');
       const res = await fetch(
         `${SHEETS}/${sheetId}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
         {
