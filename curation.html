@@ -129,6 +129,7 @@ nav a { text-decoration: none; }
       </div>
     </div>
   </div>
+  <div id="cards-pagination" class="mt-8 flex items-center justify-center gap-3"></div>
   <div id="content-list-modal" class="hidden fixed inset-0 z-[190] bg-black/45 items-center justify-center px-4">
     <div class="bg-white rounded-xl border border-warm-sand shadow-xl w-full max-w-4xl max-h-[82vh] flex flex-col overflow-hidden">
       <div class="flex items-start justify-between gap-4 p-5 border-b border-warm-sand">
@@ -174,8 +175,10 @@ nav a { text-decoration: none; }
 var activeFilter = 'all';
 var curationCards = [];
 var isContentAdmin = false;
+var cardsPage = 1;
 var contentPage = 1;
-var CONTENT_PAGE_SIZE = 5;
+var CARDS_PAGE_SIZE = 6;
+var CONTENT_PAGE_SIZE = 6;
 
 function toggleContentList(open) {
   var modal = document.getElementById('content-list-modal');
@@ -219,6 +222,7 @@ function unlockContentAdmin() {
 }
 function filterCards(type, btn) {
   activeFilter = type;
+  cardsPage = 1;
   contentPage = 1;
   document.querySelectorAll('#filter-chips button').forEach(function(b) {
     b.className = 'px-6 py-2 rounded-full bg-warm-sand text-deep-charcoal text-label-md shadow-sm border border-transparent transition-all';
@@ -228,9 +232,7 @@ function filterCards(type, btn) {
 }
 
 function applyContentFilter() {
-  document.querySelectorAll('#cards-grid [data-type]').forEach(function(c) {
-    c.style.display = (activeFilter === 'all' || c.dataset.type === activeFilter) ? '' : 'none';
-  });
+  renderCardGrid(curationCards);
   renderContentList(curationCards);
 }
 function getYtId(url) {
@@ -457,7 +459,8 @@ function mergeCards(primary, secondary) {
       url: card.url || '',
       title: card.title || '',
       desc: card.desc || '',
-      image: card.image || ''
+      image: card.image || '',
+      createdAt: card.createdAt || card.insertedAt || ''
     });
   });
   return merged;
@@ -482,6 +485,59 @@ function buildContentRow(card) {
     actions.appendChild(deleteBtn);
   }
   return row;
+}
+
+function sortCardsNewestFirst(cards) {
+  return (cards || []).map(function(card, index) {
+    return { card: card, index: index };
+  }).sort(function(a, b) {
+    var aTime = Date.parse(a.card.createdAt || a.card.insertedAt || '');
+    var bTime = Date.parse(b.card.createdAt || b.card.insertedAt || '');
+    if (!isNaN(aTime) || !isNaN(bTime)) {
+      if (isNaN(aTime)) return 1;
+      if (isNaN(bTime)) return -1;
+      if (bTime !== aTime) return bTime - aTime;
+    }
+    var aRow = Number(a.card.rowNumber) || 0;
+    var bRow = Number(b.card.rowNumber) || 0;
+    if (aRow || bRow) return bRow - aRow;
+    return b.index - a.index;
+  }).map(function(item) {
+    return item.card;
+  });
+}
+
+function renderCardGrid(cards) {
+  var grid = document.getElementById('cards-grid');
+  if (!grid) return;
+  var filteredCards = getFilteredCards(cards);
+  var maxPage = Math.max(1, Math.ceil(filteredCards.length / CARDS_PAGE_SIZE));
+  if (cardsPage > maxPage) cardsPage = maxPage;
+  var start = (cardsPage - 1) * CARDS_PAGE_SIZE;
+  var pageCards = filteredCards.slice(start, start + CARDS_PAGE_SIZE);
+  grid.innerHTML = '';
+  pageCards.forEach(function(card) { grid.appendChild(buildCard(card)); });
+  renderCardsPagination(filteredCards.length, maxPage);
+  hydrateBookCovers();
+  hydratePagePreviews();
+}
+
+function renderCardsPagination(total, maxPage) {
+  var pagination = document.getElementById('cards-pagination');
+  if (!pagination) return;
+  if (!total || maxPage <= 1) {
+    pagination.innerHTML = '';
+    return;
+  }
+  pagination.innerHTML = '<button onclick="setCardsPage(cardsPage - 1)" class="px-4 py-2 bg-warm-sand text-deep-charcoal rounded-full text-label-sm ' + (cardsPage <= 1 ? 'opacity-40 pointer-events-none' : '') + '">이전</button><span class="text-label-sm text-on-surface-variant">' + cardsPage + ' / ' + maxPage + '</span><button onclick="setCardsPage(cardsPage + 1)" class="px-4 py-2 bg-warm-sand text-deep-charcoal rounded-full text-label-sm ' + (cardsPage >= maxPage ? 'opacity-40 pointer-events-none' : '') + '">다음</button>';
+}
+
+function setCardsPage(page) {
+  var total = getFilteredCards(curationCards).length;
+  var maxPage = Math.max(1, Math.ceil(total / CARDS_PAGE_SIZE));
+  cardsPage = Math.min(Math.max(1, page), maxPage);
+  renderCardGrid(curationCards);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function renderContentList(cards) {
@@ -571,14 +627,9 @@ function showCardsGrid() {
 }
 
 function renderCards(cards) {
-  var grid = document.getElementById('cards-grid');
-  curationCards = cards;
-  grid.innerHTML = '';
-  cards.forEach(function(card) { grid.appendChild(buildCard(card)); });
-  renderContentList(cards);
-  applyContentFilter();
-  hydrateBookCovers();
-  hydratePagePreviews();
+  curationCards = sortCardsNewestFirst(cards);
+  renderCardGrid(curationCards);
+  renderContentList(curationCards);
   showCardsGrid();
 }
 
@@ -594,17 +645,14 @@ async function loadCards() {
     if (remoteList.length || localCards.length) {
       renderCards(cards);
     } else {
-      curationCards = cards;
-      renderContentList(cards);
-      applyContentFilter();
-      showCardsGrid();
+      renderCards(cards);
     }
   } catch(e) {
     console.warn('카드 로드 실패:', e);
     if (localCards.length) {
       renderCards(mergeCards(baseCards, localCards));
     } else {
-      showCardsGrid();
+      renderCards(baseCards);
     }
   }
 }
@@ -619,7 +667,7 @@ async function addCard() {
   if (!url) { alert('연결 링크를 입력해주세요.'); return; }
   var btn = document.querySelector('#content-admin-panel button[onclick="addCard()"]');
   if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
-  var card = { type: type, url: url, title: title, desc: desc, image: image };
+  var card = { type: type, url: url, title: title, desc: desc, image: image, createdAt: new Date().toISOString() };
   var savedRemote = false;
   try {
     var res = await fetch('/api/cards', {
@@ -635,8 +683,12 @@ async function addCard() {
   } finally {
     saveLocalCard(card);
     if (savedRemote) {
+      cardsPage = 1;
+      contentPage = 1;
       await loadCards();
     } else {
+      cardsPage = 1;
+      contentPage = 1;
       renderCards(mergeCards(curationCards, [card]));
     }
     clearContentForm();
@@ -645,7 +697,7 @@ async function addCard() {
 }
 document.addEventListener('DOMContentLoaded', function() {
   curationCards = readInitialCards();
-  renderContentList(curationCards);
+  renderCards(curationCards);
   loadCards();
 });
 </script>
