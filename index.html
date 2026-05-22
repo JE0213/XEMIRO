@@ -345,6 +345,44 @@
     return '';
   }
 
+  function showImageWhenLoaded(img, src) {
+    return new Promise(function(resolve) {
+      if (!src) { resolve(false); return; }
+      img.onload = function() {
+        img.classList.remove('hidden');
+        resolve(true);
+      };
+      img.onerror = function() {
+        img.removeAttribute('src');
+        resolve(false);
+      };
+      img.src = src;
+    });
+  }
+
+  async function hydrateHomeBookCovers() {
+    var images = Array.prototype.slice.call(document.querySelectorAll('img[data-home-book-cover]'));
+    images.forEach(async function(img) {
+      var title = img.getAttribute('data-home-book-cover');
+      if (!title) return;
+      try {
+        var cleanTitle = title.replace(/[<>\[\]\(\)]/g, ' ').replace(/\s+/g, ' ').trim();
+        var res = await fetch('https://www.googleapis.com/books/v1/volumes?q=' + encodeURIComponent(cleanTitle) + '&maxResults=3');
+        if (!res.ok) return;
+        var data = await res.json();
+        var items = data.items || [];
+        for (var i = 0; i < items.length; i += 1) {
+          var info = items[i] && items[i].volumeInfo;
+          var links = info && info.imageLinks;
+          var cover = links && (links.thumbnail || links.smallThumbnail);
+          if (cover && await showImageWhenLoaded(img, cover.replace(/^http:/, 'https:'))) break;
+        }
+      } catch(e) {
+        console.warn('메인 도서 표지 로드 실패:', e);
+      }
+    });
+  }
+
   function pickLatestCurationCards(cards) {
     var seen = {};
     var normalized = (cards || [])
@@ -386,8 +424,14 @@
     var thumb = getThumb(card);
     var href = card.url || 'curation.html';
     var target = card.url ? '_blank' : '_self';
+    var imageBlock = '';
+    if (thumb) {
+      imageBlock = '<div class="h-52 overflow-hidden bg-surface-container"><img class="w-full h-full ' + (card.type === 'book' ? 'object-contain bg-surface-container p-5' : 'object-cover') + ' group-hover:scale-105 transition-transform duration-500" src="' + escapeHtml(thumb) + '" alt=""></div>';
+    } else if (card.type === 'book') {
+      imageBlock = '<div class="h-52 overflow-hidden bg-surface-container relative flex items-center justify-center"><span class="material-symbols-outlined text-6xl text-primary opacity-35">menu_book</span><img class="hidden absolute inset-0 z-[1] w-full h-full object-contain bg-surface-container p-5" data-home-book-cover="' + escapeHtml(card.title) + '" alt="" loading="lazy"></div>';
+    }
     return '<a class="bg-white rounded-xl shadow-sm border border-warm-sand overflow-hidden flex flex-col group hover:-translate-y-1 transition-transform" href="' + escapeHtml(href) + '" target="' + target + '" style="word-break: keep-all;">' +
-      (thumb ? '<div class="h-52 overflow-hidden bg-surface-container"><img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="' + escapeHtml(thumb) + '" alt=""></div>' : '') +
+      imageBlock +
       '<div class="p-6 flex-grow flex flex-col justify-between gap-4 min-h-[210px]"><div><span class="text-primary text-label-sm font-label-sm inline-flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">' + getTypeIcon(card.type) + '</span>' + getTypeLabel(card.type) + '</span><h3 class="text-headline-md font-headline-md text-deep-charcoal mt-3 line-clamp-2">' + escapeHtml(card.title) + '</h3><p class="text-body-md font-body-md text-on-surface-variant line-clamp-2 mt-3">' + escapeHtml(card.desc || '') + '</p></div><span class="material-symbols-outlined text-primary self-end">arrow_forward</span></div></a>';
   }
 
@@ -401,6 +445,7 @@
       cards = Array.isArray(cards) ? pickLatestCurationCards(cards) : [];
       if (!cards.length) throw new Error('empty');
       grid.innerHTML = cards.map(buildHomeCurationCard).join('');
+      hydrateHomeBookCovers();
     } catch(e) {
       grid.innerHTML = '<a class="md:col-span-2 bg-white rounded-xl shadow-sm border border-warm-sand p-8 flex items-center justify-between hover:shadow-md transition-shadow" href="curation.html" style="word-break: keep-all;"><div><span class="text-primary text-label-sm font-label-sm">Curation</span><h3 class="text-headline-md font-headline-md text-deep-charcoal mt-2">등록된 큐레이션을 전체 목록에서 확인하세요</h3><p class="text-body-md font-body-md text-on-surface-variant mt-2">메인에는 실제 저장된 콘텐츠만 표시됩니다.</p></div><span class="material-symbols-outlined text-primary">arrow_forward</span></a>';
     }
