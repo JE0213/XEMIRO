@@ -1,6 +1,7 @@
 /**
  * Cloudflare Workers — 브리핑 자동화
  * 환경변수: ANTHROPIC_API_KEY, GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT
+ * 선택 환경변수: RESEND_API_KEY, NEWSLETTER_FROM, NEWSLETTER_RECIPIENTS, NEWSLETTER_ENABLED
  *
  * 배포 명령어:
  *   cd workers && wrangler deploy
@@ -30,7 +31,7 @@ export default {
     const url = new URL(request.url);
     const cors = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     };
 
@@ -48,6 +49,20 @@ export default {
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    if (url.pathname === '/api/briefing/newsletter-preview' && request.method === 'GET') {
+      try {
+        const rows = await readFromSheets(env);
+        const items = pickNewsletterItems(rows);
+        return new Response(renderNewsletterHtml(items, { preview: true }), {
+          headers: { ...cors, 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      } catch (e) {
+        return new Response(renderNewsletterHtml(sampleNewsletterItems(), { preview: true, error: e.message }), {
+          headers: { ...cors, 'Content-Type': 'text/html; charset=utf-8' },
         });
       }
     }
@@ -98,6 +113,30 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/briefing/newsletter-test' && request.method === 'POST') {
+      try {
+        requireEnv(env, ['BRIEFING_RUN_TOKEN']);
+        const token = request.headers.get('x-briefing-token') || url.searchParams.get('token');
+        if (token !== env.BRIEFING_RUN_TOKEN) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { ...cors, 'Content-Type': 'application/json' },
+          });
+        }
+        const rows = await readFromSheets(env);
+        const items = pickNewsletterItems(rows);
+        const result = await sendNewsletter(env, items, { test: true });
+        return new Response(JSON.stringify({ ok: true, ...result }), {
+          headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     return new Response('Not Found', { status: 404 });
   },
 };
@@ -108,6 +147,14 @@ async function runBriefing(env) {
   requireEnv(env, ['ANTHROPIC_API_KEY', 'GOOGLE_SHEET_ID', 'GOOGLE_SERVICE_ACCOUNT']);
   const items = await enrichBriefingImages(await fetchBriefingFromClaude(env.ANTHROPIC_API_KEY));
   await appendToSheets(env, items);
+  if (env.NEWSLETTER_ENABLED === 'true') {
+    try {
+      const result = await sendNewsletter(env, items);
+      console.log(`뉴스레터 발송 완료: ${result.count}명`);
+    } catch (err) {
+      console.error('[newsletter]', err.message);
+    }
+  }
   console.log(`브리핑 ${items.length}건 Sheets 저장 완료`);
   return items;
 }
@@ -439,6 +486,165 @@ function normalizeBriefingStatus(status) {
 function isPublishedBriefing(item) {
   const status = normalizeBriefingStatus(item.status);
   return !['hidden', 'hide', 'draft', 'private', 'hold', '보류', '숨김', '비공개', '삭제'].includes(status);
+}
+
+// ─── 뉴스레터 미리보기/발송 ────────────────────────────────────────────────
+
+function pickNewsletterItems(items) {
+  const rows = Array.isArray(items) ? items : [];
+  const today = getKSTDateStr();
+  const sorted = rows
+    .filter((item) => item && item.title && item.link)
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const latestDate = sorted.find((item) => item.date)?.date || today;
+  const latest = sorted.filter((item) => item.date === latestDate);
+  return (latest.length ? latest : sorted).slice(0, 6);
+}
+
+function sampleNewsletterItems() {
+  const today = getKSTDateStr();
+  return [
+    {
+      date: today,
+      category: 'AI · AX',
+      title: '대학 온라인 교육 현장에 생성형 AI 활용 확대',
+      summary: '대학과 공공기관에서 콘텐츠 제작, 학습관리, 행정 효율화를 위한 AI 도입 논의가 활발해지고 있습니다. 교육 콘텐츠 제작사에는 AI 기반 제작 프로세스와 운영 자동화 제안 기회가 커지고 있습니다.',
+      source: 'XEMIRO Briefing',
+      link: 'https://xemi.co.kr/',
+      image: fallbackImage('AI'),
+    },
+    {
+      date: today,
+      category: '콘텐츠 제작',
+      title: '실감형 스튜디오와 온라인 콘텐츠 고도화 수요 증가',
+      summary: '대학·기관의 스튜디오 구축, XR 콘텐츠, 영상 기반 교육 자산 관리 수요가 이어지고 있습니다. 구축 이후 운영 체계와 콘텐츠 제작 워크플로우까지 함께 제안하는 접근이 중요합니다.',
+      source: 'XEMIRO Briefing',
+      link: 'https://xemi.co.kr/',
+      image: fallbackImage('스튜디오'),
+    },
+    {
+      date: today,
+      category: '정책 · 공공',
+      title: '교육 플랫폼과 개인정보보호 기준 점검 필요',
+      summary: 'LMS, 교육 플랫폼, 학습 데이터 활용이 늘면서 개인정보보호와 보안 기준이 제안 평가의 핵심 요소로 부상하고 있습니다. 개발·운영 제안서에 보안 체계를 명확히 반영할 필요가 있습니다.',
+      source: 'XEMIRO Briefing',
+      link: 'https://xemi.co.kr/',
+      image: fallbackImage('보안'),
+    },
+  ];
+}
+
+function renderNewsletterHtml(items, options = {}) {
+  const picked = pickNewsletterItems(items);
+  const today = getKSTDateStr();
+  const subject = `${today} XEMIRO Briefing`;
+  const previewNotice = options.error
+    ? `<div style="margin:0 auto 16px;max-width:760px;padding:12px 16px;border-radius:12px;background:#fff3cd;color:#5f4300;font-size:13px;">시트 데이터를 불러오지 못해 샘플로 표시합니다: ${escapeHtml(options.error)}</div>`
+    : '';
+  const cards = picked.map((item) => renderNewsletterCard(item)).join('');
+
+  return `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;background:#f7f1ea;font-family:Arial,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#2d2926;">
+  <div style="padding:28px 16px 40px;">
+    ${previewNotice}
+    <main style="max-width:760px;margin:0 auto;background:#fff;border:1px solid #eaded2;border-radius:24px;overflow:hidden;box-shadow:0 18px 50px rgba(55,35,28,0.12);">
+      <section style="padding:34px 34px 30px;background:linear-gradient(135deg,#2f2723 0%,#94442e 56%,#f4a024 130%);color:#fff;">
+        <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.76;">XEMIRO Briefing</div>
+        <h1 style="margin:12px 0 10px;font-size:32px;line-height:1.25;letter-spacing:-.02em;">오늘의 교육·AI 인사이트</h1>
+        <p style="margin:0;font-size:15px;line-height:1.7;color:rgba(255,255,255,.82);">대학·기관 콘텐츠 제작, 스튜디오 구축, SW 개발 관점에서 볼 만한 소식을 골랐습니다.</p>
+        <div style="margin-top:22px;display:inline-block;padding:8px 13px;border-radius:999px;background:rgba(255,255,255,.16);font-size:13px;">${escapeHtml(today)}</div>
+      </section>
+      <section style="padding:26px 24px 8px;">
+        ${cards || renderEmptyNewsletter()}
+      </section>
+      <section style="padding:8px 34px 30px;">
+        <a href="${escapeHtml(envAwareBriefingUrl())}" style="display:block;text-align:center;text-decoration:none;border-radius:14px;background:#94442e;color:#fff;padding:15px 18px;font-weight:700;font-size:14px;">브리핑 전체 보기</a>
+      </section>
+      <footer style="padding:22px 34px;background:#fbf8f3;border-top:1px solid #eaded2;color:#77645d;font-size:12px;line-height:1.7;">
+        이 메일은 XEMIRO 자동 브리핑 시스템에서 생성되었습니다.<br>
+        수신자와 발송 시간은 Worker 환경변수로 관리됩니다.
+      </footer>
+    </main>
+  </div>
+</body>
+</html>`;
+}
+
+function renderNewsletterCard(item) {
+  const image = item.image || fallbackImage(item.category);
+  return `<article style="display:block;margin:0 0 18px;border:1px solid #eaded2;border-radius:18px;overflow:hidden;background:#fff;">
+    ${image ? `<a href="${escapeHtml(item.link)}" target="_blank" style="display:block;height:210px;background:#f5efe8;overflow:hidden;"><img src="${escapeHtml(image)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></a>` : ''}
+    <div style="padding:20px 22px 22px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+        <span style="display:inline-block;padding:5px 9px;border-radius:999px;background:#f5e9e2;color:#94442e;font-size:12px;font-weight:700;">${escapeHtml(item.category)}</span>
+        <span style="font-size:12px;color:#8a7770;">${escapeHtml(item.source || '')}</span>
+      </div>
+      <h2 style="margin:0 0 9px;font-size:22px;line-height:1.35;letter-spacing:-.02em;color:#2d2926;">${escapeHtml(item.title)}</h2>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.75;color:#55433e;">${escapeHtml(item.summary || '')}</p>
+      <a href="${escapeHtml(item.link)}" target="_blank" style="display:inline-block;color:#94442e;text-decoration:none;font-size:14px;font-weight:700;">원문 보기 →</a>
+    </div>
+  </article>`;
+}
+
+function renderEmptyNewsletter() {
+  return '<div style="padding:28px;border:1px dashed #d8c8ba;border-radius:16px;color:#77645d;text-align:center;">아직 발송할 브리핑이 없습니다.</div>';
+}
+
+async function sendNewsletter(env, items, options = {}) {
+  requireEnv(env, ['RESEND_API_KEY']);
+  const recipients = parseRecipients(env.NEWSLETTER_RECIPIENTS || env.NEWSLETTER_TEST_RECIPIENTS);
+  if (!recipients.length) throw new Error('NEWSLETTER_RECIPIENTS 환경변수가 필요합니다');
+
+  const picked = pickNewsletterItems(items);
+  const today = getKSTDateStr();
+  const subject = options.test ? `[TEST] ${today} XEMIRO Briefing` : `${today} XEMIRO Briefing`;
+  const from = env.NEWSLETTER_FROM || 'XEMIRO Briefing <onboarding@resend.dev>';
+  const html = renderNewsletterHtml(picked);
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: recipients,
+      subject,
+      html,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`뉴스레터 발송 실패: ${JSON.stringify(data)}`);
+  return { count: recipients.length, id: data.id || null };
+}
+
+function parseRecipients(value) {
+  return String(value || '')
+    .split(/[,\n;]/)
+    .map((email) => email.trim())
+    .filter(Boolean);
+}
+
+function envAwareBriefingUrl() {
+  return 'https://xemiro.pages.dev/briefing.html';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
 }
 
 // ─── 유틸 ─────────────────────────────────────────────────────────────────
