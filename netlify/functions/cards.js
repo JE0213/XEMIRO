@@ -8,6 +8,7 @@ const CORS = {
 };
 
 const SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets';
+const DEFAULT_GOOGLE_SHEET_ID = '1s3NBMsKi9g0zLCiYBKvDcep35C7xvNMG-8R9r9crC2M';
 const DEFAULT_SHEET_NAMES = ['시트1', 'Sheet1'];
 
 async function getAccessToken(creds) {
@@ -179,7 +180,7 @@ export const handler = async (event) => {
     return { statusCode: 204, headers: CORS, body: '' };
   }
 
-  const sheetId = process.env.GOOGLE_SHEET_ID;
+  const sheetId = process.env.GOOGLE_SHEET_ID || DEFAULT_GOOGLE_SHEET_ID;
   if (!sheetId) {
     return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'GOOGLE_SHEET_ID 환경변수 없음' }) };
   }
@@ -188,6 +189,7 @@ export const handler = async (event) => {
   try {
     creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT || '{}');
     if (!creds.client_email || !creds.private_key) throw new Error('필드 누락');
+    creds.private_key = creds.private_key.replace(/\\n/g, '\n');
   } catch (e) {
     return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'GOOGLE_SERVICE_ACCOUNT 파싱 실패: ' + e.message }) };
   }

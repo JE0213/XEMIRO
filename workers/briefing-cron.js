@@ -267,6 +267,7 @@ function readServiceAccount(env) {
     if (!serviceAccount.client_email || !serviceAccount.private_key) {
       throw new Error('client_email/private_key 필드 누락');
     }
+    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
     return serviceAccount;
   } catch (err) {
     throw new Error(`GOOGLE_SERVICE_ACCOUNT 파싱 실패: ${err.message}`);
