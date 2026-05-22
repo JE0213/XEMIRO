@@ -20,7 +20,7 @@
   function injectStyles() {
     var style = document.createElement('style');
     style.textContent = [
-      '.xemi-chatbot{position:fixed;right:24px;top:50%;transform:translateY(-50%);z-index:9999;font-family:inherit;color:#1e1b18}',
+      '.xemi-chatbot{position:absolute;right:24px;top:50vh;transform:translateY(-50%);z-index:9999;font-family:inherit;color:#1e1b18;transition:top .28s ease-out}',
       '.xemi-chatbot *{box-sizing:border-box}',
       '.xemi-chatbot__button{width:68px;height:68px;border:0;border-radius:22px;background:#fff;color:#94442e;box-shadow:0 18px 40px rgba(56,31,24,.24);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease;border:1px solid #eaded2;overflow:hidden;padding:4px}',
       '.xemi-chatbot__button:hover{transform:translateY(-2px);box-shadow:0 20px 44px rgba(56,31,24,.3)}',
@@ -56,7 +56,7 @@
       '.xemi-chatbot__send{width:44px;border:0;border-radius:12px;background:#94442e;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}',
       '.xemi-chatbot__send:hover{background:#7e3928}',
       '.xemi-chatbot .wstag{display:inline-flex;margin-bottom:6px;color:#94442e;font-weight:800}',
-      '@media (max-width:640px){.xemi-chatbot{right:16px;top:auto;bottom:18px;transform:none}.xemi-chatbot__hint{right:80px}.xemi-chatbot__panel{right:-4px;top:auto;bottom:80px;transform:none;width:calc(100vw - 24px);height:min(620px,calc(100vh - 112px))}}',
+      '@media (max-width:640px){.xemi-chatbot{position:fixed;right:16px;top:auto;bottom:18px;transform:none;transition:none}.xemi-chatbot__hint{right:80px}.xemi-chatbot__panel{right:-4px;top:auto;bottom:80px;transform:none;width:calc(100vw - 24px);height:min(620px,calc(100vh - 112px))}}',
     ].join('');
     document.head.appendChild(style);
   }
@@ -105,6 +105,29 @@
       input.value = '';
       ask(query, messages);
     });
+    bindScrollFollow(root);
+  }
+
+  function bindScrollFollow(root) {
+    var ticking = false;
+    function update() {
+      ticking = false;
+      if (window.matchMedia('(max-width: 640px)').matches) {
+        root.style.top = '';
+        return;
+      }
+      var y = window.scrollY + window.innerHeight * 0.52;
+      var maxY = Math.max(92, document.documentElement.scrollHeight - 120);
+      root.style.top = Math.min(Math.max(92, y), maxY) + 'px';
+    }
+    function requestUpdate() {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(update);
+    }
+    update();
+    window.addEventListener('scroll', requestUpdate, { passive: true });
+    window.addEventListener('resize', requestUpdate);
   }
 
   function renderIntro(messages) {
