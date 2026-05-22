@@ -424,10 +424,22 @@
     return picked;
   }
 
+  function getKyoboSearchFallback(card) {
+    if (!card || card.type !== 'book') return '';
+    if (!/product\.kyobobook\.co\.kr/i.test(card.url || '')) return '';
+    var imageMatch = String(card.image || '').match(/\/pdt\/(\d{10,13})\./);
+    var isbn = imageMatch && imageMatch[1];
+    return isbn ? 'https://search.kyobobook.co.kr/search?keyword=' + encodeURIComponent(isbn) : '';
+  }
+
+  function getHomeCurationHref(card) {
+    return getKyoboSearchFallback(card) || card.url || 'curation.html';
+  }
+
   function buildHomeCurationCard(card, index) {
     var thumb = getThumb(card);
-    var href = card.url || 'curation.html';
-    var target = card.url ? '_blank' : '_self';
+    var href = getHomeCurationHref(card);
+    var target = href !== 'curation.html' ? '_blank' : '_self';
     var imageBlock = '';
     if (thumb) {
       imageBlock = '<div class="h-52 overflow-hidden bg-surface-container"><img class="w-full h-full ' + (card.type === 'book' ? 'object-contain bg-surface-container p-5' : 'object-cover') + ' group-hover:scale-105 transition-transform duration-500" src="' + escapeHtml(thumb) + '" alt=""></div>';
