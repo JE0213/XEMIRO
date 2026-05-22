@@ -404,8 +404,12 @@
       .map(function(item) { return item.card; })
       .filter(function(card) {
         var key = (card.type || 'youtube') + '|' + card.url + '|' + card.title;
-        if (seen[key]) return false;
-        seen[key] = true;
+        if (seen[key]) {
+          if (!seen[key].image && card.image) seen[key].image = card.image;
+          if (!seen[key].desc && card.desc) seen[key].desc = card.desc;
+          return false;
+        }
+        seen[key] = card;
         return true;
       });
     var picked = normalized.slice(0, 4);
