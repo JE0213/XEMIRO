@@ -10,7 +10,7 @@
  *   wrangler secret put GOOGLE_SERVICE_ACCOUNT
  *
  * Google Sheets 헤더 행(Row 1) 수동 작성:
- *   날짜 | 카테고리 | 제목 | 요약 | 출처명 | 링크
+ *   날짜 | 카테고리 | 제목 | 요약 | 출처명 | 링크 | 이미지URL
  */
 
 export default {
@@ -59,7 +59,7 @@ export default {
 
 async function runBriefing(env) {
   requireEnv(env, ['ANTHROPIC_API_KEY', 'GOOGLE_SHEET_ID', 'GOOGLE_SERVICE_ACCOUNT']);
-  const items = await fetchBriefingFromClaude(env.ANTHROPIC_API_KEY);
+  const items = await enrichBriefingImages(await fetchBriefingFromClaude(env.ANTHROPIC_API_KEY));
   await appendToSheets(env, items);
   console.log(`브리핑 ${items.length}건 Sheets 저장 완료`);
 }
@@ -88,8 +88,9 @@ async function fetchBriefingFromClaude(apiKey) {
             `카테고리: 이러닝, 대학 교육정책, 대학 재정지원사업, AI 트렌드, AI 모델, 에듀테크\n` +
             `관점: 대학·기관 대상 이러닝 콘텐츠/SW개발/스튜디오 구축 회사\n` +
             `출처: 뉴스, 공공기관 공지, 정부 보도자료 등 신뢰 가능한 출처\n` +
+            `각 항목은 실제 원문 URL을 포함하고, 제목은 과장 없이 간결하게 작성.\n` +
             `JSON 형식으로만 반환 (다른 텍스트 없이 배열만):\n` +
-            `[{"date":"YYYY-MM-DD","category":"카테고리명","title":"제목","summary":"2-3문장 요약","source":"출처명","link":"URL"}]`,
+            `[{"date":"YYYY-MM-DD","category":"카테고리명","title":"제목","summary":"2-3문장 요약","source":"출처명","link":"URL","image":"이미지 URL 또는 빈 문자열"}]`,
         },
       ],
     }),
@@ -115,6 +116,79 @@ async function fetchBriefingFromClaude(apiKey) {
   const items = JSON.parse(match[0]);
   if (!Array.isArray(items)) throw new Error('Claude 응답이 JSON 배열이 아님');
   return items;
+}
+
+// ─── 기사 대표 이미지 자동 추출 ─────────────────────────────────────────────
+
+function decodeEntities(value) {
+  return String(value || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function absoluteUrl(image, pageUrl) {
+  if (!image) return '';
+  try {
+    return new URL(decodeEntities(image), pageUrl).href;
+  } catch (_) {
+    return decodeEntities(image);
+  }
+}
+
+function pickMetaImage(html, pageUrl) {
+  const patterns = [
+    /<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["'][^>]*>/i,
+    /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image(?::src)?["'][^>]*>/i,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match && match[1]) return absoluteUrl(match[1], pageUrl);
+  }
+  return '';
+}
+
+function fallbackImage(category) {
+  const images = {
+    'AI 트렌드': 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1200&q=80',
+    'AI 모델': 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&q=80',
+    '이러닝': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80',
+    '대학 교육정책': 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1200&q=80',
+    '대학 재정지원사업': 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1200&q=80',
+    '에듀테크': 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&q=80',
+  };
+  return images[category] || 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1200&q=80';
+}
+
+async function fetchArticleImage(link) {
+  if (!link) return '';
+  try {
+    const pageUrl = new URL(link);
+    if (!/^https?:$/.test(pageUrl.protocol)) return '';
+    const res = await fetch(pageUrl.href, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 XEMI Briefing Bot',
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+      },
+    });
+    if (!res.ok) return '';
+    const html = await res.text();
+    return pickMetaImage(html.slice(0, 200000), pageUrl.href);
+  } catch (_) {
+    return '';
+  }
+}
+
+async function enrichBriefingImages(items) {
+  return Promise.all(items.map(async (item) => {
+    const image = item.image || (await fetchArticleImage(item.link));
+    return { ...item, image: image || fallbackImage(item.category) };
+  }));
 }
 
 // ─── Google Sheets JWT 인증 ────────────────────────────────────────────────
@@ -203,6 +277,7 @@ async function appendToSheets(env, items) {
     item.summary ?? '',
     item.source ?? '',
     item.link ?? '',
+    item.image ?? fallbackImage(item.category),
   ]);
 
   const res = await fetch(
@@ -242,13 +317,14 @@ async function readFromSheets(env) {
   }
 
   const data = await res.json();
-  return (data.values ?? []).map(([date, category, title, summary, source, link]) => ({
+  return (data.values ?? []).map(([date, category, title, summary, source, link, image]) => ({
     date: date ?? '',
     category: category ?? '',
     title: title ?? '',
     summary: summary ?? '',
     source: source ?? '',
     link: link ?? '',
+    image: image || fallbackImage(category),
   }));
 }
 
@@ -276,7 +352,7 @@ function readServiceAccount(env) {
 
 function getBriefingRange(env, startRow = '') {
   const sheetName = env.GOOGLE_SHEET_NAME || '시트1';
-  return `${sheetName}!A${startRow}:F`;
+  return `${sheetName}!A${startRow}:G`;
 }
 
 function getKSTDateStr() {

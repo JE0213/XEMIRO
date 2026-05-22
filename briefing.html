@@ -110,14 +110,14 @@ nav a { text-decoration: none; }
   <section id="today-hero-section" class="hidden mb-stack-lg">
     <div id="today-hero"></div>
   </section>
-  <!-- 오늘의 브리핑 그리드 -->
+  <!-- 최신 브리핑 그리드 -->
   <section id="today-grid-section" class="hidden mb-stack-lg">
-    <h3 class="text-headline-md font-headline-md text-deep-charcoal mb-stack-md">오늘의 브리핑</h3>
+    <h3 class="text-headline-md font-headline-md text-deep-charcoal mb-stack-md">최신 브리핑</h3>
     <div id="today-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter"></div>
   </section>
   <!-- 최근 7일 아코디언 -->
   <section id="recent-section" class="hidden">
-    <h3 class="text-headline-md font-headline-md text-deep-charcoal mb-stack-md">최근 브리핑</h3>
+    <h3 class="text-headline-md font-headline-md text-deep-charcoal mb-stack-md">전체 브리핑</h3>
     <div id="recent-accordion"></div>
   </section>
 </main>
@@ -159,12 +159,16 @@ nav a { text-decoration: none; }
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  function img(item) {
+    return item.image || 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1200&q=80';
+  }
+
   function heroCard(item) {
     const s = getStyle(item.category);
     return `<div class="bg-white rounded-xl shadow-sm border border-warm-sand overflow-hidden flex flex-col md:flex-row hover:-translate-y-1 transition-transform duration-300">
-      <div class="md:w-1/2 h-64 md:h-auto overflow-hidden relative bg-gradient-to-br from-primary-fixed/20 to-surface-container flex items-center justify-center">
-        <span class="material-symbols-outlined text-8xl text-clay-terracotta/20">${s.icon}</span>
-        <div class="absolute top-4 left-4"><span class="bg-accent-yellow text-deep-charcoal px-3 py-1 rounded-full text-label-sm shadow-sm">오늘의 주요 소식</span></div>
+      <div class="md:w-1/2 h-64 md:h-auto min-h-[320px] overflow-hidden relative bg-surface-container">
+        <img src="${esc(img(item))}" alt="" class="w-full h-full object-cover">
+        <div class="absolute top-4 left-4"><span class="bg-accent-yellow text-deep-charcoal px-3 py-1 rounded-full text-label-sm shadow-sm">Featured</span></div>
       </div>
       <div class="md:w-1/2 p-stack-md flex flex-col justify-center">
         <div class="flex items-center gap-2 mb-3">
@@ -183,8 +187,8 @@ nav a { text-decoration: none; }
   function gridCard(item) {
     const s = getStyle(item.category);
     return `<div class="bg-white rounded-xl shadow-sm border border-warm-sand overflow-hidden hover:-translate-y-1 transition-transform duration-300 flex flex-col">
-      <div class="h-48 overflow-hidden bg-gradient-to-br from-surface-container to-surface-container-highest flex items-center justify-center">
-        <span class="material-symbols-outlined text-6xl text-clay-terracotta/20">${s.icon}</span>
+      <div class="h-48 overflow-hidden bg-surface-container">
+        <img src="${esc(img(item))}" alt="" class="w-full h-full object-cover">
       </div>
       <div class="p-stack-sm flex-grow flex flex-col">
         <div class="flex items-center gap-2 mb-2">
@@ -203,14 +207,17 @@ nav a { text-decoration: none; }
   function accordionGroup(date, items) {
     const rows = items.map((item) => {
       const s = getStyle(item.category);
-      return `<div class="px-4 py-3 hover:bg-surface-container-low border-t border-warm-sand first:border-t-0">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="text-label-sm ${s.tag} px-2 py-0.5 rounded">${esc(item.category)}</span>
-          <span class="text-label-sm text-outline">${esc(item.source)}</span>
+      return `<div class="px-4 py-3 hover:bg-surface-container-low border-t border-warm-sand first:border-t-0 flex gap-3">
+        <img src="${esc(img(item))}" alt="" class="w-20 h-16 rounded-lg object-cover bg-surface-container shrink-0">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-label-sm ${s.tag} px-2 py-0.5 rounded">${esc(item.category)}</span>
+            <span class="text-label-sm text-outline">${esc(item.source)}</span>
+          </div>
+          <a href="${esc(item.link)}" target="_blank" rel="noopener"
+             class="text-on-surface hover:text-clay-terracotta font-label-md block mb-1" style="word-break:keep-all;">${esc(item.title)}</a>
+          <p class="text-body-md text-on-surface-variant line-clamp-2">${esc(item.summary)}</p>
         </div>
-        <a href="${esc(item.link)}" target="_blank" rel="noopener"
-           class="text-on-surface hover:text-clay-terracotta font-label-md block mb-1" style="word-break:keep-all;">${esc(item.title)}</a>
-        <p class="text-body-md text-on-surface-variant line-clamp-2">${esc(item.summary)}</p>
       </div>`;
     }).join('');
     return `<details class="border border-warm-sand rounded-xl overflow-hidden mb-3 group">
@@ -232,11 +239,15 @@ nav a { text-decoration: none; }
       const all = await res.json();
       if (all.error) throw new Error(all.error);
 
-      const today    = getKSTToday();
-      const weekAgo  = getNDaysAgo(7);
+      const today = getKSTToday();
+      const sortedAll = all
+        .filter((r) => r && r.date && r.title)
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      const latestDate = sortedAll[0]?.date;
+      const activeDate = sortedAll.some((r) => r.date === today) ? today : latestDate;
 
-      const todayItems  = all.filter((r) => r.date === today);
-      const recentItems = all.filter((r) => r.date > weekAgo && r.date < today);
+      const todayItems = sortedAll.filter((r) => r.date === activeDate);
+      const archiveItems = sortedAll.filter((r) => r.date !== activeDate);
 
       hide('briefing-loading');
 
@@ -251,16 +262,16 @@ nav a { text-decoration: none; }
         show('today-grid-section');
       }
 
-      if (recentItems.length > 0) {
+      if (archiveItems.length > 0) {
         const groups = {};
-        recentItems.forEach((r) => { (groups[r.date] ??= []).push(r); });
+        archiveItems.forEach((r) => { (groups[r.date] ??= []).push(r); });
         const sorted = Object.keys(groups).sort((a, b) => b.localeCompare(a));
         document.getElementById('recent-accordion').innerHTML =
           sorted.map((d) => accordionGroup(d, groups[d])).join('');
         show('recent-section');
       }
 
-      if (todayItems.length === 0 && recentItems.length === 0) {
+      if (todayItems.length === 0 && archiveItems.length === 0) {
         document.getElementById('briefing-error-msg').textContent =
           '표시할 브리핑이 없습니다. 매일 오전 9시에 업데이트됩니다.';
         show('briefing-error');
