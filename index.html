@@ -181,23 +181,15 @@
 <h2 class="text-headline-lg font-headline-lg text-deep-charcoal" style="word-break: keep-all;">최신 소식 &amp; 정책</h2>
 <a class="flex items-center text-primary font-label-md text-label-md hover:underline group" href="briefing.html" style="word-break: keep-all;">더보기 <span class="material-symbols-outlined ml-1 group-hover:translate-x-1 transition-transform text-sm">arrow_forward</span></a>
 </div>
-<div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
-<div class="bg-white p-6 rounded-lg shadow-[0_4px_24px_rgba(179,92,68,0.04)] border border-warm-sand flex flex-col gap-4 group hover:-translate-y-1 transition-transform cursor-pointer" onclick="location.href='briefing.html'">
-<div class="flex justify-between items-start">
+<div id="home-briefing-grid" class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+<a class="md:col-span-2 bg-white p-6 rounded-lg shadow-[0_4px_24px_rgba(179,92,68,0.04)] border border-warm-sand flex items-center justify-between gap-4 hover:-translate-y-1 transition-transform" href="briefing.html" style="word-break: keep-all;">
+<div>
 <span class="bg-accent-yellow text-deep-charcoal px-3 py-1 rounded-full text-label-sm font-label-sm">Briefing</span>
-<span class="text-on-surface-variant text-label-sm font-label-sm">Updated</span>
+<h3 class="text-headline-md font-headline-md text-on-surface mt-3">최신 브리핑을 불러오는 중입니다</h3>
+<p class="text-body-md font-body-md text-on-surface-variant mt-2">오늘 업데이트된 정책과 AI 소식을 확인합니다.</p>
 </div>
-<h3 class="text-headline-md font-headline-md text-on-surface group-hover:text-primary transition-colors" style="word-break: keep-all;">회의자료 브리핑 확인</h3>
-<p class="text-body-md font-body-md text-on-surface-variant line-clamp-2" style="word-break: keep-all;">현재 정리된 브리핑 페이지로 이동해 발표 자료와 핵심 내용을 확인하세요.</p>
-</div>
-<div class="bg-white p-6 rounded-lg shadow-[0_4px_24px_rgba(179,92,68,0.04)] border border-warm-sand flex flex-col gap-4 group hover:-translate-y-1 transition-transform cursor-pointer" onclick="location.href='briefing.html'">
-<div class="flex justify-between items-start">
-<span class="bg-warm-sand text-deep-charcoal px-3 py-1 rounded-full text-label-sm font-label-sm">Archive</span>
-<span class="text-on-surface-variant text-label-sm font-label-sm">Live Page</span>
-</div>
-<h3 class="text-headline-md font-headline-md text-on-surface group-hover:text-primary transition-colors" style="word-break: keep-all;">브리핑 전체 페이지로 이동</h3>
-<p class="text-body-md font-body-md text-on-surface-variant line-clamp-2" style="word-break: keep-all;">메인에는 목업 소식 대신 실제 브리핑 페이지로 이어지는 진입점만 표시합니다.</p>
-</div>
+<span class="material-symbols-outlined text-primary">arrow_forward</span>
+</a>
 </div>
 </section>
 
@@ -277,6 +269,47 @@
     return match ? match[1] : null;
   }
 
+  var BRIEFING_WORKER_URL = 'https://xemiro-briefing.lucyprantis.workers.dev';
+
+  function formatBriefingDate(date) {
+    var value = String(date || '');
+    return value.replace(/-/g, '.');
+  }
+
+  function pickHomeBriefings(items) {
+    return (items || [])
+      .filter(function(item) { return item && item.date && item.title; })
+      .sort(function(a, b) { return String(b.date).localeCompare(String(a.date)); })
+      .slice(0, 2);
+  }
+
+  function buildHomeBriefingCard(item, index) {
+    var href = item.link || 'briefing.html';
+    var summary = item.summary || '';
+    return '<a class="bg-white rounded-lg shadow-[0_4px_24px_rgba(179,92,68,0.04)] border border-warm-sand overflow-hidden flex flex-col group hover:-translate-y-1 transition-transform" href="' + escapeHtml(href) + '" target="_blank" style="word-break: keep-all;">' +
+      (item.image ? '<div class="h-36 bg-surface-container overflow-hidden"><img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="' + escapeHtml(item.image) + '" alt=""></div>' : '') +
+      '<div class="p-6 flex flex-col gap-4 flex-grow"><div class="flex justify-between items-start gap-3">' +
+      '<span class="' + (index === 0 ? 'bg-accent-yellow text-deep-charcoal' : 'bg-warm-sand text-deep-charcoal') + ' px-3 py-1 rounded-full text-label-sm font-label-sm">' + escapeHtml(item.category || 'Briefing') + '</span>' +
+      '<span class="text-on-surface-variant text-label-sm font-label-sm whitespace-nowrap">' + formatBriefingDate(item.date) + '</span></div>' +
+      '<div><h3 class="text-headline-md font-headline-md text-on-surface group-hover:text-primary transition-colors line-clamp-2">' + escapeHtml(item.title) + '</h3>' +
+      '<p class="text-body-md font-body-md text-on-surface-variant line-clamp-2 mt-2">' + escapeHtml(summary) + '</p></div>' +
+      '<span class="material-symbols-outlined text-primary self-end mt-auto">arrow_forward</span></div></a>';
+  }
+
+  async function loadHomeBriefing() {
+    var grid = document.getElementById('home-briefing-grid');
+    if (!grid) return;
+    try {
+      var res = await fetch(BRIEFING_WORKER_URL + '/api/briefing');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var items = pickHomeBriefings(await res.json());
+      if (!items.length) throw new Error('empty');
+      grid.innerHTML = items.map(buildHomeBriefingCard).join('');
+    } catch(e) {
+      grid.innerHTML = '<a class="md:col-span-2 bg-white p-6 rounded-lg shadow-[0_4px_24px_rgba(179,92,68,0.04)] border border-warm-sand flex items-center justify-between gap-4 hover:-translate-y-1 transition-transform" href="briefing.html" style="word-break: keep-all;"><div><span class="bg-accent-yellow text-deep-charcoal px-3 py-1 rounded-full text-label-sm font-label-sm">Briefing</span><h3 class="text-headline-md font-headline-md text-on-surface mt-3">브리핑 전체 페이지로 이동</h3><p class="text-body-md font-body-md text-on-surface-variant mt-2">저장된 최신 브리핑을 전체 페이지에서 확인하세요.</p></div><span class="material-symbols-outlined text-primary">arrow_forward</span></a>';
+    }
+  }
+
   function getTypeLabel(type) {
     if (type === 'book') return '도서';
     if (type === 'seminar') return '세미나';
@@ -354,6 +387,7 @@
 
   // 슬라이더 (원본 그대로)
   document.addEventListener('DOMContentLoaded', function() {
+    loadHomeBriefing();
     loadHomeCuration();
     const slides = document.querySelectorAll('.hero-slide');
     const dots = document.querySelectorAll('.slider-dot');
