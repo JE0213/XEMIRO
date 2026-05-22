@@ -8,6 +8,7 @@
  * 시크릿 등록:
  *   wrangler secret put ANTHROPIC_API_KEY
  *   wrangler secret put GOOGLE_SERVICE_ACCOUNT
+ *   wrangler secret put BRIEFING_RUN_TOKEN
  *
  * Google Sheets 헤더 행(Row 1) 수동 작성:
  *   날짜 | 카테고리 | 제목 | 요약 | 출처명 | 링크 | 이미지URL
@@ -51,6 +52,52 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/briefing/run' && request.method === 'POST') {
+      try {
+        requireEnv(env, ['BRIEFING_RUN_TOKEN']);
+        const token = request.headers.get('x-briefing-token') || url.searchParams.get('token');
+        if (token !== env.BRIEFING_RUN_TOKEN) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { ...cors, 'Content-Type': 'application/json' },
+          });
+        }
+        const items = await runBriefing(env);
+        return new Response(JSON.stringify({ ok: true, count: items.length, items }), {
+          headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    if (url.pathname === '/api/briefing/import' && request.method === 'POST') {
+      try {
+        requireEnv(env, ['BRIEFING_RUN_TOKEN', 'GOOGLE_SHEET_ID', 'GOOGLE_SERVICE_ACCOUNT']);
+        const token = request.headers.get('x-briefing-token') || url.searchParams.get('token');
+        if (token !== env.BRIEFING_RUN_TOKEN) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { ...cors, 'Content-Type': 'application/json' },
+          });
+        }
+        const body = await request.json();
+        const items = await enrichBriefingImages(normalizeBriefingItems(body.items || body));
+        await appendToSheets(env, items);
+        return new Response(JSON.stringify({ ok: true, count: items.length, items }), {
+          headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     return new Response('Not Found', { status: 404 });
   },
 };
@@ -62,6 +109,20 @@ async function runBriefing(env) {
   const items = await enrichBriefingImages(await fetchBriefingFromClaude(env.ANTHROPIC_API_KEY));
   await appendToSheets(env, items);
   console.log(`브리핑 ${items.length}건 Sheets 저장 완료`);
+  return items;
+}
+
+function normalizeBriefingItems(items) {
+  if (!Array.isArray(items)) throw new Error('items 배열이 필요합니다');
+  return items.map((item) => ({
+    date: String(item.date || getKSTDateStr()),
+    category: String(item.category || ''),
+    title: String(item.title || ''),
+    summary: String(item.summary || ''),
+    source: String(item.source || ''),
+    link: String(item.link || ''),
+    image: String(item.image || ''),
+  })).filter((item) => item.category && item.title && item.link);
 }
 
 // ─── Claude API (web_search 아젠틱 루프) ───────────────────────────────────
@@ -84,10 +145,11 @@ async function fetchBriefingFromClaude(apiKey) {
         {
           role: 'user',
           content:
-            `오늘 날짜(${today}) 기준 최근 1~2주 이내 아래 카테고리별 최신 정보 각 1개씩 총 6개.\n` +
-            `카테고리: 이러닝, 대학 교육정책, 대학 재정지원사업, AI 트렌드, AI 모델, 에듀테크\n` +
-            `관점: 대학·기관 대상 이러닝 콘텐츠/SW개발/스튜디오 구축 회사\n` +
-            `출처: 뉴스, 공공기관 공지, 정부 보도자료 등 신뢰 가능한 출처\n` +
+            `오늘 날짜(${today}) 기준 최근 7일 이내에 공개/보도된 최신 정보 중 중요도 높은 5~8개를 골라줘.\n` +
+            `관심 영역: 이러닝, 대학 교육정책, 대학 재정지원사업, AI 트렌드, AI 모델, 에듀테크.\n` +
+            `관심 영역은 검색 범위와 분류 기준일 뿐이며, 영역별로 반드시 1개씩 맞추지 마. 최신성, 신뢰도, 대학·기관 대상 이러닝 콘텐츠/SW개발/스튜디오 구축 회사 관점의 실무 relevance를 우선해.\n` +
+            `출처는 뉴스, 공공기관 공지, 정부 보도자료, 공식 블로그처럼 신뢰 가능한 원문으로 제한해.\n` +
+            `date는 원문 공개일 또는 보도일을 YYYY-MM-DD로 쓰고, 최근 7일을 벗어난 항목은 제외해.\n` +
             `각 항목은 실제 원문 URL을 포함하고, 제목은 과장 없이 간결하게 작성.\n` +
             `JSON 형식으로만 반환 (다른 텍스트 없이 배열만):\n` +
             `[{"date":"YYYY-MM-DD","category":"카테고리명","title":"제목","summary":"2-3문장 요약","source":"출처명","link":"URL","image":"이미지 URL 또는 빈 문자열"}]`,
