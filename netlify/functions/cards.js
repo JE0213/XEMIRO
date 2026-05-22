@@ -73,16 +73,21 @@ function normalizeType(value) {
   return 'youtube';
 }
 
+function cellByHeader(row, index, fallbackIndex) {
+  if (index !== -1 && row[index] !== undefined) return row[index];
+  return row[fallbackIndex] || '';
+}
+
 function rowToCard(row, rowNumber, headerMap) {
   let card;
   if (headerMap) {
     card = {
       rowNumber,
-      type: normalizeType(row[headerMap.type] || ''),
-      url: row[headerMap.url] || '',
-      title: row[headerMap.title] || '',
-      desc: row[headerMap.desc] || '',
-      image: row[headerMap.image] || '',
+      type: normalizeType(cellByHeader(row, headerMap.type, 0)),
+      url: cellByHeader(row, headerMap.url, 1),
+      title: cellByHeader(row, headerMap.title, 2),
+      desc: cellByHeader(row, headerMap.desc, 3),
+      image: cellByHeader(row, headerMap.image, 4),
     };
   } else {
     card = {
