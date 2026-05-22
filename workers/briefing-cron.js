@@ -56,12 +56,12 @@ export default {
     if (url.pathname === '/api/briefing/newsletter-preview' && request.method === 'GET') {
       try {
         const rows = await readFromSheets(env);
-        const items = pickNewsletterItems(rows);
-        return new Response(renderNewsletterHtml(items, { preview: true }), {
+        const curationItems = await readCurationCards(env).catch(() => []);
+        return new Response(renderNewsletterHtml(rows, { preview: true, curationItems }), {
           headers: { ...cors, 'Content-Type': 'text/html; charset=utf-8' },
         });
       } catch (e) {
-        return new Response(renderNewsletterHtml(sampleNewsletterItems(), { preview: true, error: e.message }), {
+        return new Response(renderNewsletterHtml(sampleNewsletterItems(), { preview: true, error: e.message, curationItems: sampleCurationItems() }), {
           headers: { ...cors, 'Content-Type': 'text/html; charset=utf-8' },
         });
       }
@@ -124,8 +124,8 @@ export default {
           });
         }
         const rows = await readFromSheets(env);
-        const items = pickNewsletterItems(rows);
-        const result = await sendNewsletter(env, items, { test: true });
+        const curationItems = await readCurationCards(env).catch(() => []);
+        const result = await sendNewsletter(env, rows, { test: true, curationItems });
         return new Response(JSON.stringify({ ok: true, ...result }), {
           headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8' },
         });
@@ -149,7 +149,8 @@ async function runBriefing(env) {
   await appendToSheets(env, items);
   if (env.NEWSLETTER_ENABLED === 'true') {
     try {
-      const result = await sendNewsletter(env, items);
+      const curationItems = await readCurationCards(env).catch(() => []);
+      const result = await sendNewsletter(env, items, { curationItems });
       console.log(`뉴스레터 발송 완료: ${result.count}명`);
     } catch (err) {
       console.error('[newsletter]', err.message);
@@ -501,6 +502,22 @@ function pickNewsletterItems(items) {
   return (latest.length ? latest : sorted).slice(0, 6);
 }
 
+function pickBriefingTeasers(items) {
+  return pickNewsletterItems(items).slice(0, 3);
+}
+
+function pickCurationTeasers(items) {
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => item && item.title && item.url)
+    .slice()
+    .reverse()
+    .filter((item, index, arr) => {
+      const key = `${item.type || ''}|${item.url || ''}|${item.title || ''}`;
+      return arr.findIndex((other) => `${other.type || ''}|${other.url || ''}|${other.title || ''}` === key) === index;
+    })
+    .slice(0, 3);
+}
+
 function sampleNewsletterItems() {
   const today = getKSTDateStr();
   return [
@@ -534,14 +551,35 @@ function sampleNewsletterItems() {
   ];
 }
 
+function sampleCurationItems() {
+  return [
+    {
+      type: 'youtube',
+      title: 'AI 영상 제작 워크플로우 정리',
+      desc: '기관 홍보·교육 콘텐츠 제작에 참고할 만한 AI 영상 제작 흐름을 짧게 큐레이션했습니다.',
+      url: 'https://xemiro.pages.dev/curation.html',
+      image: fallbackImage('AI'),
+    },
+    {
+      type: 'seminar',
+      title: '교육·에듀테크 세미나',
+      desc: '대학·공공기관 제안과 사업기회 탐색에 참고할 만한 행사입니다.',
+      url: 'https://xemiro.pages.dev/curation.html',
+      image: fallbackImage('seminar'),
+    },
+  ];
+}
+
 function renderNewsletterHtml(items, options = {}) {
-  const picked = pickNewsletterItems(items);
+  const briefings = pickBriefingTeasers(items);
+  const curations = pickCurationTeasers(options.curationItems || []);
   const today = getKSTDateStr();
   const subject = `${today} XEMIRO Briefing`;
   const previewNotice = options.error
     ? `<div style="margin:0 auto 16px;max-width:760px;padding:12px 16px;border-radius:12px;background:#fff3cd;color:#5f4300;font-size:13px;">시트 데이터를 불러오지 못해 샘플로 표시합니다: ${escapeHtml(options.error)}</div>`
     : '';
-  const cards = picked.map((item) => renderNewsletterCard(item)).join('');
+  const briefingCards = briefings.map((item) => renderNewsletterCard(item, 'briefing')).join('');
+  const curationCards = curations.map((item) => renderNewsletterCard(normalizeCurationForNewsletter(item), 'curation')).join('');
 
   return `<!doctype html>
 <html lang="ko">
@@ -556,15 +594,25 @@ function renderNewsletterHtml(items, options = {}) {
     <main style="max-width:760px;margin:0 auto;background:#fff;border:1px solid #eaded2;border-radius:24px;overflow:hidden;box-shadow:0 18px 50px rgba(55,35,28,0.12);">
       <section style="padding:34px 34px 30px;background:linear-gradient(135deg,#2f2723 0%,#94442e 56%,#f4a024 130%);color:#fff;">
         <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.76;">XEMIRO Briefing</div>
-        <h1 style="margin:12px 0 10px;font-size:32px;line-height:1.25;letter-spacing:-.02em;">오늘의 교육·AI 인사이트</h1>
-        <p style="margin:0;font-size:15px;line-height:1.7;color:rgba(255,255,255,.82);">대학·기관 콘텐츠 제작, 스튜디오 구축, SW 개발 관점에서 볼 만한 소식을 골랐습니다.</p>
+        <h1 style="margin:12px 0 10px;font-size:32px;line-height:1.25;letter-spacing:-.02em;">오늘 볼 만한 것만 살짝</h1>
+        <p style="margin:0;font-size:15px;line-height:1.7;color:rgba(255,255,255,.82);">대학·기관 콘텐츠 제작, 스튜디오 구축, SW 개발 관점에서 놓치면 아쉬운 소식과 큐레이션을 골랐습니다.</p>
         <div style="margin-top:22px;display:inline-block;padding:8px 13px;border-radius:999px;background:rgba(255,255,255,.16);font-size:13px;">${escapeHtml(today)}</div>
       </section>
-      <section style="padding:26px 24px 8px;">
-        ${cards || renderEmptyNewsletter()}
+      <section style="padding:26px 24px 4px;">
+        ${renderNewsletterSectionTitle('최신 브리핑', '핵심만 짧게 보고, 자세한 내용은 재미로에서 이어서 확인하세요.')}
+        ${briefingCards || renderEmptyNewsletter()}
+      </section>
+      <section style="padding:8px 24px 4px;">
+        ${renderNewsletterSectionTitle('추천 큐레이션', '영상, 도서, 세미나까지 업무에 참고할 만한 자료를 함께 담았습니다.')}
+        ${curationCards || renderEmptyNewsletter()}
       </section>
       <section style="padding:8px 34px 30px;">
-        <a href="${escapeHtml(envAwareBriefingUrl())}" style="display:block;text-align:center;text-decoration:none;border-radius:14px;background:#94442e;color:#fff;padding:15px 18px;font-weight:700;font-size:14px;">브리핑 전체 보기</a>
+        <a href="${escapeHtml(envAwareHomeUrl())}" style="display:block;text-align:center;text-decoration:none;border-radius:14px;background:#94442e;color:#fff;padding:15px 18px;font-weight:700;font-size:14px;">재미로에서 전체 보기 →</a>
+        <div style="margin-top:12px;text-align:center;font-size:12px;">
+          <a href="${escapeHtml(envAwareBriefingUrl())}" style="color:#94442e;text-decoration:none;font-weight:700;">브리핑</a>
+          <span style="color:#c8b8aa;margin:0 8px;">|</span>
+          <a href="${escapeHtml(envAwareCurationUrl())}" style="color:#94442e;text-decoration:none;font-weight:700;">큐레이션</a>
+        </div>
       </section>
       <footer style="padding:22px 34px;background:#fbf8f3;border-top:1px solid #eaded2;color:#77645d;font-size:12px;line-height:1.7;">
         이 메일은 XEMIRO 자동 브리핑 시스템에서 생성되었습니다.<br>
@@ -576,18 +624,27 @@ function renderNewsletterHtml(items, options = {}) {
 </html>`;
 }
 
-function renderNewsletterCard(item) {
+function renderNewsletterSectionTitle(title, desc) {
+  return `<div style="margin:0 0 14px;padding:0 2px;">
+    <h2 style="margin:0;font-size:18px;line-height:1.35;color:#2d2926;">${escapeHtml(title)}</h2>
+    <p style="margin:5px 0 0;font-size:13px;line-height:1.6;color:#77645d;">${escapeHtml(desc)}</p>
+  </div>`;
+}
+
+function renderNewsletterCard(item, kind = 'briefing') {
   const image = item.image || fallbackImage(item.category);
-  return `<article style="display:block;margin:0 0 18px;border:1px solid #eaded2;border-radius:18px;overflow:hidden;background:#fff;">
-    ${image ? `<a href="${escapeHtml(item.link)}" target="_blank" style="display:block;height:210px;background:#f5efe8;overflow:hidden;"><img src="${escapeHtml(image)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></a>` : ''}
-    <div style="padding:20px 22px 22px;">
+  const url = kind === 'curation' ? envAwareCurationUrl() : envAwareBriefingUrl();
+  const action = kind === 'curation' ? '큐레이션에서 보기 →' : '자세히 보기 →';
+  return `<article style="display:block;margin:0 0 14px;border:1px solid #eaded2;border-radius:16px;overflow:hidden;background:#fff;">
+    ${image ? `<a href="${escapeHtml(url)}" target="_blank" style="display:block;height:132px;background:#f5efe8;overflow:hidden;"><img src="${escapeHtml(image)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></a>` : ''}
+    <div style="padding:16px 18px 18px;">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
         <span style="display:inline-block;padding:5px 9px;border-radius:999px;background:#f5e9e2;color:#94442e;font-size:12px;font-weight:700;">${escapeHtml(item.category)}</span>
         <span style="font-size:12px;color:#8a7770;">${escapeHtml(item.source || '')}</span>
       </div>
-      <h2 style="margin:0 0 9px;font-size:22px;line-height:1.35;letter-spacing:-.02em;color:#2d2926;">${escapeHtml(item.title)}</h2>
-      <p style="margin:0 0 16px;font-size:14px;line-height:1.75;color:#55433e;">${escapeHtml(item.summary || '')}</p>
-      <a href="${escapeHtml(item.link)}" target="_blank" style="display:inline-block;color:#94442e;text-decoration:none;font-size:14px;font-weight:700;">원문 보기 →</a>
+      <h3 style="margin:0 0 8px;font-size:19px;line-height:1.36;letter-spacing:-.02em;color:#2d2926;">${escapeHtml(item.title)}</h3>
+      <p style="margin:0 0 14px;font-size:13px;line-height:1.65;color:#55433e;">${escapeHtml(truncateText(item.summary || '', 92))}</p>
+      <a href="${escapeHtml(url)}" target="_blank" style="display:inline-block;color:#94442e;text-decoration:none;font-size:13px;font-weight:700;">${action}</a>
     </div>
   </article>`;
 }
@@ -596,16 +653,132 @@ function renderEmptyNewsletter() {
   return '<div style="padding:28px;border:1px dashed #d8c8ba;border-radius:16px;color:#77645d;text-align:center;">아직 발송할 브리핑이 없습니다.</div>';
 }
 
+function normalizeCurationForNewsletter(item) {
+  const labels = { youtube: 'YouTube', book: '도서', seminar: '세미나' };
+  return {
+    category: labels[item.type] || '큐레이션',
+    title: item.title || '',
+    summary: item.desc || '재미로 큐레이션에서 이어서 확인해보세요.',
+    source: 'XEMIRO Curation',
+    link: item.url || envAwareCurationUrl(),
+    image: item.image || fallbackImage(item.type),
+  };
+}
+
+async function readCurationCards(env) {
+  requireEnv(env, ['GOOGLE_SHEET_ID', 'GOOGLE_SERVICE_ACCOUNT']);
+  const sa = readServiceAccount(env);
+  const token = await getAccessToken(sa);
+  const auth = { Authorization: `Bearer ${token}` };
+  const names = await getSheetNames(env.GOOGLE_SHEET_ID, auth);
+  const candidates = uniqueStrings([env.CURATION_SHEET_NAME, env.GOOGLE_SHEET_NAME, '시트1', 'Sheet1', ...names]);
+  let best = [];
+  for (const name of candidates) {
+    try {
+      const cards = await readCurationCardsFromSheet(env.GOOGLE_SHEET_ID, auth, name);
+      if (cards.length > best.length) best = cards;
+    } catch (_) {}
+  }
+  return best;
+}
+
+async function getSheetNames(sheetId, auth) {
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`, {
+    headers: auth,
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.sheets || []).map((sheet) => sheet.properties.title).filter(Boolean);
+}
+
+async function readCurationCardsFromSheet(sheetId, auth, sheetName) {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${sheetName}!A1:Z`)}`,
+    { headers: auth }
+  );
+  if (!res.ok) throw new Error(`큐레이션 시트 읽기 실패: ${sheetName}`);
+  const data = await res.json();
+  return valuesToCurationCards(data.values || []);
+}
+
+function valuesToCurationCards(values) {
+  if (!Array.isArray(values) || !values.length) return [];
+  const first = values[0] || [];
+  const hasHeader = looksLikeCurationHeader(first);
+  const start = hasHeader ? 1 : 0;
+  const header = hasHeader ? {
+    type: findHeaderIndex(first, ['type', '유형', '분류', '카테고리']),
+    url: findHeaderIndex(first, ['url', 'link', '링크', '주소']),
+    title: findHeaderIndex(first, ['title', '제목']),
+    desc: findHeaderIndex(first, ['desc', 'description', '요약', '설명', '내용']),
+    image: findHeaderIndex(first, ['image', 'thumbnail', '썸네일', '이미지']),
+  } : null;
+
+  return values.slice(start)
+    .map((row, index) => rowToCurationCard(row || [], start + index + 1, header))
+    .filter((card) => card.title && card.url && normalizeText(card.title) !== 'title' && normalizeText(card.title) !== '제목');
+}
+
+function rowToCurationCard(row, rowNumber, header) {
+  const byHeader = (key, fallback) => header && header[key] !== -1 && row[header[key]] !== undefined ? row[header[key]] : row[fallback];
+  let card = {
+    rowNumber,
+    type: normalizeCurationType(byHeader('type', 0)),
+    url: byHeader('url', 1) || '',
+    title: byHeader('title', 2) || '',
+    desc: byHeader('desc', 3) || '',
+    image: byHeader('image', 4) || '',
+  };
+  if (!card.title && row[0] && looksLikeUrl(row[1])) {
+    card = {
+      rowNumber,
+      type: normalizeCurationType(row[3] || ''),
+      url: row[1] || '',
+      title: row[0] || '',
+      desc: row[2] || '',
+      image: row[4] || '',
+    };
+  }
+  return {
+    ...card,
+    url: String(card.url || '').trim(),
+    title: String(card.title || '').trim(),
+    desc: String(card.desc || '').trim(),
+    image: String(card.image || '').trim(),
+  };
+}
+
+function looksLikeCurationHeader(row) {
+  const normalized = (row || []).map(normalizeText);
+  return ['type', 'url', 'title', '제목', '링크'].some((name) => normalized.includes(normalizeText(name)));
+}
+
+function findHeaderIndex(headers, names) {
+  const normalizedNames = names.map(normalizeText);
+  for (let i = 0; i < headers.length; i += 1) {
+    if (normalizedNames.includes(normalizeText(headers[i]))) return i;
+  }
+  return -1;
+}
+
+function normalizeCurationType(value) {
+  const type = normalizeText(value);
+  if (['book', '도서'].includes(type)) return 'book';
+  if (['seminar', '세미나', 'event', '행사'].includes(type)) return 'seminar';
+  return 'youtube';
+}
+
 async function sendNewsletter(env, items, options = {}) {
   requireEnv(env, ['RESEND_API_KEY']);
   const recipients = parseRecipients(env.NEWSLETTER_RECIPIENTS || env.NEWSLETTER_TEST_RECIPIENTS);
   if (!recipients.length) throw new Error('NEWSLETTER_RECIPIENTS 환경변수가 필요합니다');
 
-  const picked = pickNewsletterItems(items);
+  const picked = pickBriefingTeasers(items);
+  const curationItems = options.curationItems || [];
   const today = getKSTDateStr();
   const subject = options.test ? `[TEST] ${today} XEMIRO Briefing` : `${today} XEMIRO Briefing`;
   const from = env.NEWSLETTER_FROM || 'XEMIRO Briefing <onboarding@resend.dev>';
-  const html = renderNewsletterHtml(picked);
+  const html = renderNewsletterHtml(picked, { curationItems });
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -635,6 +808,37 @@ function parseRecipients(value) {
 
 function envAwareBriefingUrl() {
   return 'https://xemiro.pages.dev/briefing.html';
+}
+
+function envAwareCurationUrl() {
+  return 'https://xemiro.pages.dev/curation.html';
+}
+
+function envAwareHomeUrl() {
+  return 'https://xemiro.pages.dev/';
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function uniqueStrings(values) {
+  const seen = new Set();
+  return values.filter((value) => {
+    const text = String(value || '').trim();
+    if (!text || seen.has(text)) return false;
+    seen.add(text);
+    return true;
+  });
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function looksLikeUrl(value) {
+  return /^https?:\/\//i.test(String(value || '').trim());
 }
 
 function escapeHtml(value) {
