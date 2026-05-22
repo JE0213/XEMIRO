@@ -11,7 +11,7 @@
  *   wrangler secret put BRIEFING_RUN_TOKEN
  *
  * Google Sheets 헤더 행(Row 1) 수동 작성:
- *   날짜 | 카테고리 | 제목 | 요약 | 출처명 | 링크 | 이미지URL
+ *   날짜 | 카테고리 | 제목 | 요약 | 출처명 | 링크 | 이미지URL | 상태
  */
 
 export default {
@@ -340,6 +340,7 @@ async function appendToSheets(env, items) {
     item.source ?? '',
     item.link ?? '',
     item.image ?? fallbackImage(item.category),
+    item.status || 'published',
   ]);
 
   const res = await fetch(
@@ -379,7 +380,7 @@ async function readFromSheets(env) {
   }
 
   const data = await res.json();
-  const rows = (data.values ?? []).map(([date, category, title, summary, source, link, image]) => ({
+  const rows = (data.values ?? []).map(([date, category, title, summary, source, link, image, status]) => ({
     date: date ?? '',
     category: category ?? '',
     title: title ?? '',
@@ -387,7 +388,8 @@ async function readFromSheets(env) {
     source: source ?? '',
     link: link ?? '',
     image: image || fallbackImage(category),
-  })).filter((item) => !isPlaceholderBriefing(item));
+    status: normalizeBriefingStatus(status),
+  })).filter((item) => !isPlaceholderBriefing(item) && isPublishedBriefing(item));
 
   const seen = new Set();
   const deduped = rows.reverse().filter((item) => {
@@ -430,6 +432,15 @@ function isPlaceholderBriefing(item) {
   );
 }
 
+function normalizeBriefingStatus(status) {
+  return String(status || 'published').trim().toLowerCase();
+}
+
+function isPublishedBriefing(item) {
+  const status = normalizeBriefingStatus(item.status);
+  return !['hidden', 'hide', 'draft', 'private', 'hold', '보류', '숨김', '비공개', '삭제'].includes(status);
+}
+
 // ─── 유틸 ─────────────────────────────────────────────────────────────────
 
 function requireEnv(env, names) {
@@ -454,7 +465,7 @@ function readServiceAccount(env) {
 
 function getBriefingRange(env, startRow = '') {
   const sheetName = env.GOOGLE_SHEET_NAME || '시트1';
-  return `${sheetName}!A${startRow}:G`;
+  return `${sheetName}!A${startRow}:H`;
 }
 
 function getKSTDateStr() {
