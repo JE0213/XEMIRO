@@ -5,6 +5,8 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com" rel="preconnect">
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://images.unsplash.com" rel="preconnect">
+<link as="image" href="https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&amp;fit=crop&amp;w=1600&amp;q=72" rel="preload">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
 <script id="tailwind-config">
@@ -110,13 +112,17 @@
   body { background-color: #FDFCF8; }
   .bg-soft-cream { background-color: #FDFCF8; }
   .text-deep-charcoal { color: #2D2926; }
-  .hero-slider-container { position: relative; width: 100%; height: 100%; overflow: hidden; }
-  .hero-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 1s ease-in-out; z-index: 0; }
+  .hero-slider-container { position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; }
+  .hero-slide { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.65s ease-in-out; z-index: 0; }
   .hero-slide.active { opacity: 1; z-index: 1; }
-  .hero-slide-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(253,252,248,0.2), rgba(0,0,0,0.1)); z-index: 2; }
+  .hero-slide img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.02); }
+  .hero-copy-overlay { position: absolute; inset: 0; z-index: 3; background: linear-gradient(90deg, rgba(30,27,24,0.82) 0%, rgba(30,27,24,0.58) 43%, rgba(30,27,24,0.18) 100%); }
   .slider-dots { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; }
   .slider-dot { width: 8px; height: 8px; border-radius: 50%; background-color: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.1); cursor: pointer; transition: all 0.3s ease; }
   .slider-dot.active { background-color: #94442e; width: 24px; border-radius: 4px; }
+  @media (max-width: 767px) {
+    .hero-copy-overlay { background: linear-gradient(180deg, rgba(30,27,24,0.82) 0%, rgba(30,27,24,0.62) 58%, rgba(30,27,24,0.32) 100%); }
+  }
 </style>
 </head>
 <body class="font-body-md text-body-md text-on-surface bg-soft-cream min-h-screen flex flex-col">
@@ -141,33 +147,40 @@
 </nav>
 
 <main class="flex-grow">
-<!-- Hero Section: 원본 구조 그대로, 슬라이더 이미지만 Unsplash로 교체 -->
-<section class="relative px-margin-mobile md:px-margin-desktop py-16 md:py-32 max-w-container-max-width mx-auto flex flex-col items-center text-center overflow-hidden">
-<div class="absolute inset-0 bg-gradient-to-br from-soft-cream to-surface-container opacity-50 -z-10 rounded-xl"></div>
-<div class="max-w-3xl space-y-6">
-<h1 class="text-display-lg font-display-lg text-primary" style="word-break: keep-all;">내일을 바꾸는 오늘의 발견</h1>
-<p class="text-headline-md font-headline-md text-on-surface-variant" style="word-break: keep-all;">10시간의 효율을 만드는 1시간</p>
-<div class="pt-8"></div>
-</div>
-<div class="mt-16 w-full aspect-video md:h-[450px] rounded-xl overflow-hidden shadow-sm border border-warm-sand/30 bg-white relative">
+<!-- Hero Section -->
+<section class="relative px-margin-mobile md:px-margin-desktop py-10 md:py-14 max-w-container-max-width mx-auto overflow-hidden">
+<div class="relative min-h-[520px] md:min-h-[620px] rounded-xl overflow-hidden shadow-sm border border-warm-sand/30 bg-deep-charcoal">
 <div class="hero-slider-container" id="hero-slider">
-<div class="hero-slide">
-<div class="hero-slide-overlay"></div>
-<img alt="팀 학습" class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1400&q=80">
-</div>
 <div class="hero-slide active">
-<div class="hero-slide-overlay"></div>
-<img alt="AI 기술" class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1400&q=80">
+<img alt="AI 기반 협업을 준비하는 팀" decoding="async" fetchpriority="high" loading="eager" src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&amp;fit=crop&amp;w=1600&amp;q=72">
 </div>
 <div class="hero-slide">
-<div class="hero-slide-overlay"></div>
-<img alt="팀 협업" class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=1400&q=80">
+<img alt="AX 전환 전략 회의" decoding="async" loading="lazy" src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&amp;fit=crop&amp;w=1600&amp;q=72">
+</div>
+<div class="hero-slide">
+<img alt="열정적으로 일하는 회사원" decoding="async" loading="lazy" src="https://images.unsplash.com/photo-1573164713714-d95e436ab8d6?auto=format&amp;fit=crop&amp;w=1600&amp;q=72">
+</div>
+<div class="hero-slide">
+<img alt="디지털 전환 워크숍" decoding="async" loading="lazy" src="https://images.unsplash.com/photo-1551836022-deb4988cc6c0?auto=format&amp;fit=crop&amp;w=1600&amp;q=72">
+</div>
+<div class="hero-slide">
+<img alt="AI 솔루션을 논의하는 업무 공간" decoding="async" loading="lazy" src="https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&amp;fit=crop&amp;w=1600&amp;q=72">
+</div>
+</div>
+<div class="hero-copy-overlay"></div>
+<div class="relative z-[4] min-h-[520px] md:min-h-[620px] flex items-center px-6 md:px-16 py-16 md:py-20">
+<div class="max-w-2xl space-y-6 text-left">
+<p class="text-label-md font-label-md text-white/75" style="word-break: keep-all;">AI · AX Transformation</p>
+<h1 class="text-[40px] md:text-display-lg font-display-lg text-white" style="word-break: keep-all;">내일을 바꾸는 오늘의 발견</h1>
+<p class="text-headline-md font-headline-md text-white/85" style="word-break: keep-all;">10시간의 효율을 만드는 1시간</p>
+</div>
 </div>
 <div class="slider-dots" id="slider-dots">
-<div class="slider-dot" data-index="0"></div>
-<div class="slider-dot active" data-index="1"></div>
+<div class="slider-dot active" data-index="0"></div>
+<div class="slider-dot" data-index="1"></div>
 <div class="slider-dot" data-index="2"></div>
-</div>
+<div class="slider-dot" data-index="3"></div>
+<div class="slider-dot" data-index="4"></div>
 </div>
 </div>
 </section>
@@ -385,14 +398,14 @@
     }
   }
 
-  // 슬라이더 (원본 그대로)
+  // Hero slider
   document.addEventListener('DOMContentLoaded', function() {
     loadHomeBriefing();
     loadHomeCuration();
     const slides = document.querySelectorAll('.hero-slide');
     const dots = document.querySelectorAll('.slider-dot');
     let currentSlide = 0;
-    const slideInterval = 5000;
+    const slideInterval = 3600;
     function showSlide(index) {
       slides.forEach(slide => slide.classList.remove('active'));
       dots.forEach(dot => dot.classList.remove('active'));
