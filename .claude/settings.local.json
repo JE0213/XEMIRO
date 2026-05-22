@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-Content '\\\\\\\\xemi-dev\\\\xemi_homes\\\\김정은\\\\재미로_260521\\\\briefing.html' | Select-Object -Skip 99 -First 47\")",
+      "Bash(cd /d \"\\\\\\\\xemi-dev\\\\xemi_homes\\\\김정은\\\\재미로_260521\")",
+      "Bash(python -c ' *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3)",
+      "Bash(node -e ' *)",
+      "Bash(mkdir -p workers)",
+      "Bash(awk 'NR>=98 && NR<=144 {print NR\": \"$0}' briefing.html)",
+      "Bash(cat)",
+      "Bash(python3 /tmp/patch_briefing.py)",
+      "Bash(python3 workers/_patch.py)",
+      "Bash(py --version)",
+      "Bash(py workers/_patch.py)",
+      "Bash(rm workers/_patch.py && ls workers/)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
+    ],
+    "additionalDirectories": [
+      "\\\\xemi-dev\\xemi_homes\\김정은\\재미로_260521",
+      "\\\\xemi-dev\\xemi_homes\\김정은\\재미로_260521\\workers"
+    ]
+  }
+}

@@ -229,7 +229,7 @@ async function appendToSheets(env, items) {
 async function readFromSheets(env) {
   const sa = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT);
   const token = await getAccessToken(sa);
-  const range = encodeURIComponent('Sheet1!A2:F');
+  const range = encodeURIComponent('시트1!A2:F');
 
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${range}`,
