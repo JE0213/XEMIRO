@@ -117,7 +117,7 @@
   .hero-slide.active { opacity: 1; z-index: 1; }
   .hero-slide img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.02); }
   .hero-copy-overlay { position: absolute; inset: 0; z-index: 3; background: linear-gradient(90deg, rgba(30,27,24,0.82) 0%, rgba(30,27,24,0.58) 43%, rgba(30,27,24,0.18) 100%); }
-  .slider-dots { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; }
+  .slider-dots { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; }
   .slider-dot { width: 8px; height: 8px; border-radius: 50%; background-color: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.1); cursor: pointer; transition: all 0.3s ease; }
   .slider-dot.active { background-color: #94442e; width: 24px; border-radius: 4px; }
   @media (max-width: 767px) {
@@ -148,8 +148,8 @@
 
 <main class="flex-grow">
 <!-- Hero Section -->
-<section class="relative px-margin-mobile md:px-margin-desktop py-10 md:py-14 max-w-container-max-width mx-auto overflow-hidden">
-<div class="relative min-h-[520px] md:min-h-[620px] rounded-xl overflow-hidden shadow-sm border border-warm-sand/30 bg-deep-charcoal">
+<section class="relative px-margin-mobile md:px-margin-desktop py-8 md:py-8 max-w-container-max-width mx-auto overflow-hidden">
+<div class="relative min-h-[430px] md:min-h-[360px] rounded-xl overflow-hidden shadow-sm border border-warm-sand/30 bg-deep-charcoal">
 <div class="hero-slider-container" id="hero-slider">
 <div class="hero-slide active">
 <img alt="디지털 업무 공간" decoding="async" fetchpriority="high" loading="eager" src="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&amp;fit=crop&amp;w=1600&amp;q=72">
@@ -168,11 +168,11 @@
 </div>
 </div>
 <div class="hero-copy-overlay"></div>
-<div class="relative z-[4] min-h-[520px] md:min-h-[620px] flex items-center px-6 md:px-16 py-16 md:py-20">
-<div class="max-w-2xl space-y-6 text-left">
+<div class="relative z-[4] min-h-[430px] md:min-h-[360px] flex items-center px-6 md:px-14 py-12 md:py-12">
+<div class="max-w-2xl space-y-4 text-left">
 <p class="text-label-md font-label-md text-white/75" style="word-break: keep-all;">AI · AX Transformation</p>
-<h1 class="text-[40px] md:text-display-lg font-display-lg text-white" style="word-break: keep-all;">내일을 바꾸는 오늘의 발견</h1>
-<p class="text-headline-md font-headline-md text-white/85" style="word-break: keep-all;">10시간의 효율을 만드는 1시간</p>
+<h1 class="text-[34px] md:text-[46px] font-display-lg text-white" style="word-break: keep-all;">내일을 바꾸는 오늘의 발견</h1>
+<p class="text-title-lg md:text-headline-sm font-headline-md text-white/85" style="word-break: keep-all;">10시간의 효율을 만드는 1시간</p>
 </div>
 </div>
 <div class="slider-dots" id="slider-dots">
@@ -186,11 +186,11 @@
 </section>
 
 <!-- Content Sections: 원본 그대로 -->
-<div class="px-margin-mobile md:px-margin-desktop max-w-container-max-width mx-auto space-y-32 pb-32">
+<div class="px-margin-mobile md:px-margin-desktop max-w-container-max-width mx-auto space-y-20 md:space-y-24 pb-32">
 
 <!-- Policy & News: 원본 그대로 -->
 <section>
-<div class="flex justify-between items-end mb-8 border-b border-warm-sand pb-4">
+<div class="flex justify-between items-end mb-6 border-b border-warm-sand pb-4">
 <h2 class="text-headline-lg font-headline-lg text-deep-charcoal" style="word-break: keep-all;">최신 소식 &amp; 정책</h2>
 <a class="flex items-center text-primary font-label-md text-label-md hover:underline group" href="briefing.html" style="word-break: keep-all;">더보기 <span class="material-symbols-outlined ml-1 group-hover:translate-x-1 transition-transform text-sm">arrow_forward</span></a>
 </div>
@@ -208,7 +208,7 @@
 
 <!-- Curated Recommendations -->
 <section>
-<div class="flex justify-between items-end mb-8 border-b border-warm-sand pb-4">
+<div class="flex justify-between items-end mb-6 border-b border-warm-sand pb-4">
 <h2 class="text-headline-lg font-headline-lg text-deep-charcoal" style="word-break: keep-all;">큐레이션</h2>
 <a class="flex items-center text-primary font-label-md text-label-md hover:underline group" href="curation.html" style="word-break: keep-all;">전체보기 <span class="material-symbols-outlined ml-1 group-hover:translate-x-1 transition-transform text-sm">arrow_forward</span></a>
 </div>
