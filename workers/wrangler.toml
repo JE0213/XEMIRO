@@ -6,4 +6,4 @@ compatibility_date = "2024-01-01"
 crons = ["0 0 * * *"]
 
 [vars]
-GOOGLE_SHEET_ID = "1IxA6wAXcR3MjZpBw_K4rPQhi0XrRW_toMkNdxkI2liI"
+GOOGLE_SHEET_ID = "1s3NBMsKi9g0zLCiYBKvDcep35C7xvNMG-8R9r9crC2M"
