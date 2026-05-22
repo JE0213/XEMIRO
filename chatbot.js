@@ -20,12 +20,15 @@
   function injectStyles() {
     var style = document.createElement('style');
     style.textContent = [
-      '.xemi-chatbot{position:fixed;right:24px;bottom:24px;z-index:9999;font-family:inherit;color:#1e1b18}',
+      '.xemi-chatbot{position:fixed;right:24px;top:50%;transform:translateY(-50%);z-index:9999;font-family:inherit;color:#1e1b18}',
       '.xemi-chatbot *{box-sizing:border-box}',
       '.xemi-chatbot__button{width:68px;height:68px;border:0;border-radius:22px;background:#fff;color:#94442e;box-shadow:0 18px 40px rgba(56,31,24,.24);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease;border:1px solid #eaded2;overflow:hidden;padding:4px}',
       '.xemi-chatbot__button:hover{transform:translateY(-2px);box-shadow:0 20px 44px rgba(56,31,24,.3)}',
       '.xemi-chatbot__button img{width:100%;height:100%;object-fit:contain;display:block}',
-      '.xemi-chatbot__panel{position:absolute;right:0;bottom:76px;width:min(380px,calc(100vw - 32px));height:min(620px,calc(100vh - 120px));background:#fff;border:1px solid #e8ded1;border-radius:18px;box-shadow:0 24px 70px rgba(33,21,17,.22);overflow:hidden;display:none;flex-direction:column}',
+      '.xemi-chatbot__hint{position:absolute;right:82px;top:50%;transform:translateY(-50%) translateX(8px);opacity:0;pointer-events:none;white-space:nowrap;background:#2f2723;color:#fff;border-radius:999px;padding:9px 13px;font-size:12px;font-weight:700;box-shadow:0 12px 28px rgba(33,21,17,.18);transition:opacity .18s ease,transform .18s ease}',
+      '.xemi-chatbot__hint::after{content:"";position:absolute;right:-5px;top:50%;width:10px;height:10px;background:#2f2723;transform:translateY(-50%) rotate(45deg)}',
+      '.xemi-chatbot:not(.is-open):hover .xemi-chatbot__hint{opacity:1;transform:translateY(-50%) translateX(0)}',
+      '.xemi-chatbot__panel{position:absolute;right:82px;top:50%;transform:translateY(-50%);width:min(380px,calc(100vw - 132px));height:min(620px,calc(100vh - 48px));background:#fff;border:1px solid #e8ded1;border-radius:18px;box-shadow:0 24px 70px rgba(33,21,17,.22);overflow:hidden;display:none;flex-direction:column}',
       '.xemi-chatbot.is-open .xemi-chatbot__panel{display:flex}',
       '.xemi-chatbot__head{padding:18px 18px 14px;background:#fbf8f3;border-bottom:1px solid #e8ded1;display:flex;align-items:center;justify-content:space-between;gap:12px}',
       '.xemi-chatbot__brand{display:flex;align-items:center;gap:12px;min-width:0}',
@@ -53,7 +56,7 @@
       '.xemi-chatbot__send{width:44px;border:0;border-radius:12px;background:#94442e;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}',
       '.xemi-chatbot__send:hover{background:#7e3928}',
       '.xemi-chatbot .wstag{display:inline-flex;margin-bottom:6px;color:#94442e;font-weight:800}',
-      '@media (max-width:640px){.xemi-chatbot{right:16px;bottom:16px}.xemi-chatbot__panel{right:-4px;bottom:72px;width:calc(100vw - 24px);height:min(620px,calc(100vh - 104px))}}',
+      '@media (max-width:640px){.xemi-chatbot{right:16px;top:auto;bottom:18px;transform:none}.xemi-chatbot__hint{right:80px}.xemi-chatbot__panel{right:-4px;top:auto;bottom:80px;transform:none;width:calc(100vw - 24px);height:min(620px,calc(100vh - 112px))}}',
     ].join('');
     document.head.appendChild(style);
   }
@@ -73,6 +76,7 @@
           '<button class="xemi-chatbot__send" type="submit" aria-label="보내기"><span class="material-symbols-outlined">send</span></button>' +
         '</form>' +
       '</section>' +
+      '<div class="xemi-chatbot__hint">무엇이든 물어보세요</div>' +
       '<button class="xemi-chatbot__button" type="button" aria-label="위키 챗봇 열기"><img src="' + characterSrc + '" alt=""></button>';
 
     document.body.appendChild(root);
