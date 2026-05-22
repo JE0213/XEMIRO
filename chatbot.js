@@ -15,18 +15,21 @@
     '스토리보드 기본 구성이 뭐야?',
     '와이파이 비번 뭐야?',
   ];
+  var characterSrc = 'assets/xemiro-chatbot.png';
 
   function injectStyles() {
     var style = document.createElement('style');
     style.textContent = [
       '.xemi-chatbot{position:fixed;right:24px;bottom:24px;z-index:9999;font-family:inherit;color:#1e1b18}',
       '.xemi-chatbot *{box-sizing:border-box}',
-      '.xemi-chatbot__button{width:58px;height:58px;border:0;border-radius:18px;background:#94442e;color:#fff;box-shadow:0 18px 40px rgba(56,31,24,.24);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease}',
+      '.xemi-chatbot__button{width:68px;height:68px;border:0;border-radius:22px;background:#fff;color:#94442e;box-shadow:0 18px 40px rgba(56,31,24,.24);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease;border:1px solid #eaded2;overflow:hidden;padding:4px}',
       '.xemi-chatbot__button:hover{transform:translateY(-2px);box-shadow:0 20px 44px rgba(56,31,24,.3)}',
-      '.xemi-chatbot__button .material-symbols-outlined{font-size:28px}',
+      '.xemi-chatbot__button img{width:100%;height:100%;object-fit:contain;display:block}',
       '.xemi-chatbot__panel{position:absolute;right:0;bottom:76px;width:min(380px,calc(100vw - 32px));height:min(620px,calc(100vh - 120px));background:#fff;border:1px solid #e8ded1;border-radius:18px;box-shadow:0 24px 70px rgba(33,21,17,.22);overflow:hidden;display:none;flex-direction:column}',
       '.xemi-chatbot.is-open .xemi-chatbot__panel{display:flex}',
       '.xemi-chatbot__head{padding:18px 18px 14px;background:#fbf8f3;border-bottom:1px solid #e8ded1;display:flex;align-items:center;justify-content:space-between;gap:12px}',
+      '.xemi-chatbot__brand{display:flex;align-items:center;gap:12px;min-width:0}',
+      '.xemi-chatbot__avatar{width:48px;height:48px;border-radius:16px;background:#fff;border:1px solid #eaded2;object-fit:contain;padding:3px;box-shadow:0 8px 18px rgba(56,31,24,.12);flex:0 0 auto}',
       '.xemi-chatbot__title{font-weight:800;font-size:16px;letter-spacing:0;color:#2f2723}',
       '.xemi-chatbot__sub{font-size:12px;color:#77645d;margin-top:3px;line-height:1.4}',
       '.xemi-chatbot__close{border:0;background:transparent;color:#77645d;width:34px;height:34px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}',
@@ -37,6 +40,9 @@
       '.xemi-chatbot__msg--user{background:#94442e;color:#fff;margin-left:auto;border-bottom-right-radius:6px}',
       '.xemi-chatbot__msg a{color:#94442e;font-weight:700;text-decoration:none}',
       '.xemi-chatbot__msg a:hover{text-decoration:underline}',
+      '.xemi-chatbot__hello{display:flex;align-items:flex-start;gap:10px}',
+      '.xemi-chatbot__hello img{width:58px;height:58px;object-fit:contain;flex:0 0 auto;margin-top:-4px}',
+      '.xemi-chatbot__hello-text{min-width:0}',
       '.xemi-chatbot__source{margin-top:10px;padding-top:10px;border-top:1px solid rgba(148,68,46,.16);font-size:12px;color:#77645d}',
       '.xemi-chatbot__suggestions{display:flex;flex-wrap:wrap;gap:7px;margin:4px 0 14px}',
       '.xemi-chatbot__chip{border:1px solid #e1d3c6;background:#fff;color:#6a5148;border-radius:999px;padding:7px 10px;font-size:12px;cursor:pointer}',
@@ -58,7 +64,7 @@
     root.innerHTML =
       '<section class="xemi-chatbot__panel" aria-label="XEMIRO 위키 챗봇">' +
         '<header class="xemi-chatbot__head">' +
-          '<div><div class="xemi-chatbot__title">XEMIRO Wiki Bot</div><div class="xemi-chatbot__sub">사내 위키에서 필요한 내용을 찾아드릴게요.</div></div>' +
+          '<div class="xemi-chatbot__brand"><img class="xemi-chatbot__avatar" src="' + characterSrc + '" alt=""><div><div class="xemi-chatbot__title">XEMIRO Wiki Bot</div><div class="xemi-chatbot__sub">사내 위키에서 필요한 내용을 찾아드릴게요.</div></div></div>' +
           '<button class="xemi-chatbot__close" type="button" aria-label="닫기"><span class="material-symbols-outlined">close</span></button>' +
         '</header>' +
         '<div class="xemi-chatbot__messages" role="log" aria-live="polite"></div>' +
@@ -67,7 +73,7 @@
           '<button class="xemi-chatbot__send" type="submit" aria-label="보내기"><span class="material-symbols-outlined">send</span></button>' +
         '</form>' +
       '</section>' +
-      '<button class="xemi-chatbot__button" type="button" aria-label="위키 챗봇 열기"><span class="material-symbols-outlined">chat_bubble</span></button>';
+      '<button class="xemi-chatbot__button" type="button" aria-label="위키 챗봇 열기"><img src="' + characterSrc + '" alt=""></button>';
 
     document.body.appendChild(root);
 
@@ -99,7 +105,7 @@
 
   function renderIntro(messages) {
     addMessage(messages, 'bot',
-      '궁금한 내용을 짧게 물어보세요. 지금은 위키에 등록된 기준, 절차, 사내 가이드 중심으로 답변해요.' +
+      '<div class="xemi-chatbot__hello"><img src="' + characterSrc + '" alt=""><div class="xemi-chatbot__hello-text">궁금한 내용을 짧게 물어보세요. 지금은 위키에 등록된 기준, 절차, 사내 가이드 중심으로 답변해요.</div></div>' +
       '<div class="xemi-chatbot__suggestions">' +
       suggestions.map(function (text) {
         return '<button class="xemi-chatbot__chip" type="button" data-chat-question="' + escapeHtml(text) + '">' + escapeHtml(text) + '</button>';
