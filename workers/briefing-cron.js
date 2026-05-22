@@ -146,9 +146,9 @@ async function fetchBriefingFromClaude(apiKey) {
           role: 'user',
           content:
             `오늘 날짜(${today}) 기준 최근 7일 이내에 공개/보도된 최신 정보 중 중요도 높은 5~8개를 골라줘.\n` +
-            `관심 영역: 이러닝, 대학 교육정책, 대학 재정지원사업, AI 트렌드, AI 모델, 에듀테크.\n` +
-            `관심 영역은 검색 범위와 분류 기준일 뿐이며, 영역별로 반드시 1개씩 맞추지 마. 최신성, 신뢰도, 대학·기관 대상 이러닝 콘텐츠/SW개발/스튜디오 구축 회사 관점의 실무 relevance를 우선해.\n` +
-            `출처는 뉴스, 공공기관 공지, 정부 보도자료, 공식 블로그처럼 신뢰 가능한 원문으로 제한해.\n` +
+            `관심 영역: 대학·공공기관 온라인 콘텐츠 제작, 원격교육/이러닝, 스튜디오·XR·실감형 콘텐츠 구축, LMS/교육 플랫폼/SW 개발, 에듀테크 보안·개인정보, AI 트렌드, AI 모델.\n` +
+            `우리는 대학·기관 대상으로 온라인 교육 콘텐츠 제작, 스튜디오 구축, SW 개발을 하는 회사다. 관심 영역은 검색 범위와 분류 기준일 뿐이며, 영역별로 반드시 1개씩 맞추지 마. 최신성, 신뢰도, 발주/제안/사업기회와의 관련성을 우선해.\n` +
+            `출처는 한국어 뉴스, 공공기관 공지, 정부 보도자료, 국내 공식 블로그를 우선해. 해외 AI 모델/트렌드도 가능하면 한국어 해설 기사나 한국어 공식 페이지를 사용해.\n` +
             `date는 브리핑 발행일인 ${today}로 통일해. 단, 원문 공개일/보도일이 최근 7일을 벗어난 항목은 제외해.\n` +
             `각 항목은 실제 원문 URL을 포함하고, 제목은 과장 없이 간결하게 작성.\n` +
             `JSON 형식으로만 반환 (다른 텍스트 없이 배열만):\n` +
@@ -390,7 +390,7 @@ async function readFromSheets(env) {
   })).filter((item) => !isPlaceholderBriefing(item));
 
   const seen = new Set();
-  return rows.reverse().filter((item) => {
+  const deduped = rows.reverse().filter((item) => {
     const key = [
       String(item.date || '').trim(),
       String(item.category || '').trim(),
@@ -400,6 +400,15 @@ async function readFromSheets(env) {
     seen.add(key);
     return true;
   }).reverse();
+
+  const byDate = new Map();
+  for (const item of deduped) {
+    const date = String(item.date || '').trim();
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date).push(item);
+  }
+
+  return Array.from(byDate.values()).flatMap((items) => items.slice(-8));
 }
 
 function isPlaceholderBriefing(item) {
