@@ -6,7 +6,6 @@ const CORS = {
 };
 
 const SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets';
-const DEFAULT_GOOGLE_SHEET_ID = '1s3NBMsKi9g0zLCiYBKvDcep35C7xvNMG-8R9r9crC2M';
 const DEFAULT_SHEET_NAMES = ['시트1', 'Sheet1'];
 
 function jsonResponse(body, status = 200) {
@@ -247,7 +246,7 @@ export async function onRequest(context) {
     return new Response('', { status: 204, headers: CORS });
   }
 
-  var sheetId = env.GOOGLE_SHEET_ID || DEFAULT_GOOGLE_SHEET_ID;
+  var sheetId = env.GOOGLE_SHEET_ID;
   if (!sheetId) {
     return jsonResponse({ error: 'GOOGLE_SHEET_ID 환경변수 없음' }, 500);
   }
