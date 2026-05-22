@@ -149,7 +149,7 @@ async function fetchBriefingFromClaude(apiKey) {
             `관심 영역: 이러닝, 대학 교육정책, 대학 재정지원사업, AI 트렌드, AI 모델, 에듀테크.\n` +
             `관심 영역은 검색 범위와 분류 기준일 뿐이며, 영역별로 반드시 1개씩 맞추지 마. 최신성, 신뢰도, 대학·기관 대상 이러닝 콘텐츠/SW개발/스튜디오 구축 회사 관점의 실무 relevance를 우선해.\n` +
             `출처는 뉴스, 공공기관 공지, 정부 보도자료, 공식 블로그처럼 신뢰 가능한 원문으로 제한해.\n` +
-            `date는 원문 공개일 또는 보도일을 YYYY-MM-DD로 쓰고, 최근 7일을 벗어난 항목은 제외해.\n` +
+            `date는 브리핑 발행일인 ${today}로 통일해. 단, 원문 공개일/보도일이 최근 7일을 벗어난 항목은 제외해.\n` +
             `각 항목은 실제 원문 URL을 포함하고, 제목은 과장 없이 간결하게 작성.\n` +
             `JSON 형식으로만 반환 (다른 텍스트 없이 배열만):\n` +
             `[{"date":"YYYY-MM-DD","category":"카테고리명","title":"제목","summary":"2-3문장 요약","source":"출처명","link":"URL","image":"이미지 URL 또는 빈 문자열"}]`,
@@ -387,7 +387,26 @@ async function readFromSheets(env) {
     source: source ?? '',
     link: link ?? '',
     image: image || fallbackImage(category),
-  }));
+  })).filter((item) => !isPlaceholderBriefing(item));
+}
+
+function isPlaceholderBriefing(item) {
+  const category = String(item.category || '').trim();
+  const title = String(item.title || '').trim();
+  const summary = String(item.summary || '').trim();
+  const link = String(item.link || '').trim();
+  return (
+    title === '테스트 제목' ||
+    summary === '테스트 요약' ||
+    link === 'https://example.com' ||
+    link === 'http://example.com' ||
+    title.includes('??') ||
+    summary.includes('??') ||
+    category.includes('??') ||
+    title.includes('�') ||
+    summary.includes('�') ||
+    category.includes('�')
+  );
 }
 
 // ─── 유틸 ─────────────────────────────────────────────────────────────────
