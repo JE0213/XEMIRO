@@ -3,7 +3,7 @@ import { createSign } from 'crypto';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Content-Type': 'application/json',
 };
 
@@ -223,6 +223,31 @@ export const handler = async (event) => {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(`Sheets POST ${res.status}: ${JSON.stringify(data)}`);
+      return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true }) };
+    }
+
+    if (event.httpMethod === 'PUT') {
+      const { rowNumber, type, url, title, desc, image } = JSON.parse(event.body || '{}');
+      const targetRow = Number(rowNumber);
+      if (!Number.isInteger(targetRow) || targetRow < 1) {
+        return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: '수정할 행 번호가 올바르지 않습니다' }) };
+      }
+      if (!title) {
+        return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: '제목 필수' }) };
+      }
+      if (!url) {
+        return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'URL 필수' }) };
+      }
+
+      const sheetName = process.env.GOOGLE_SHEET_NAME || '시트1';
+      const range = encodeURIComponent(`${sheetName}!A${targetRow}:E${targetRow}`);
+      const res = await fetch(`${SHEETS}/${sheetId}/values/${range}?valueInputOption=RAW`, {
+        method: 'PUT',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[type, url || '', title, desc || '', image || '']] }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(`Sheets PUT ${res.status}: ${JSON.stringify(data)}`);
       return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true }) };
     }
 

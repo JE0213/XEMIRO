@@ -1,7 +1,7 @@
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Content-Type': 'application/json',
 };
 
@@ -281,6 +281,33 @@ export async function onRequest(context) {
       );
       var postData = await postRes.json();
       if (!postRes.ok) throw new Error('Sheets POST ' + postRes.status + ': ' + JSON.stringify(postData));
+      return jsonResponse({ ok: true });
+    }
+
+    if (request.method === 'PUT') {
+      var putBody = await readJson(request);
+      var putRowNumber = Number(putBody.rowNumber);
+      if (!Number.isInteger(putRowNumber) || putRowNumber < 1) {
+        return jsonResponse({ error: '수정할 행 번호가 올바르지 않습니다' }, 400);
+      }
+      if (!putBody.title) {
+        return jsonResponse({ error: '제목 필수' }, 400);
+      }
+      if (!putBody.url) {
+        return jsonResponse({ error: 'URL 필수' }, 400);
+      }
+
+      var putSheetName = env.GOOGLE_SHEET_NAME || '시트1';
+      var putRes = await fetch(
+        SHEETS + '/' + sheetId + '/values/' + encodeURIComponent(putSheetName + '!A' + putRowNumber + ':E' + putRowNumber) + '?valueInputOption=RAW',
+        {
+          method: 'PUT',
+          headers: Object.assign({}, auth, { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ values: [[putBody.type, putBody.url || '', putBody.title, putBody.desc || '', putBody.image || '']] }),
+        }
+      );
+      var putData = await putRes.json();
+      if (!putRes.ok) throw new Error('Sheets PUT ' + putRes.status + ': ' + JSON.stringify(putData));
       return jsonResponse({ ok: true });
     }
 

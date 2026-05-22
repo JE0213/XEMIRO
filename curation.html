@@ -160,8 +160,9 @@ nav a { text-decoration: none; }
           <div><label class="block text-label-sm text-on-surface-variant mb-1">한줄 코멘트</label><input id="e-desc" type="text" placeholder="간단한 설명" class="w-full border border-warm-sand rounded-lg px-3 py-2 text-body-md focus:outline-none focus:ring-2 focus:ring-primary/50"></div>
           <div class="md:col-span-2"><label class="block text-label-sm text-on-surface-variant mb-1">이미지 URL</label><input id="e-image" type="text" placeholder="https://...jpg 또는 도서 표지 이미지 주소" class="w-full border border-warm-sand rounded-lg px-3 py-2 text-body-md focus:outline-none focus:ring-2 focus:ring-primary/50"></div>
         </div>
-        <div class="flex gap-3">
-          <button onclick="addCard()" class="px-6 py-2 bg-primary text-white rounded-full text-label-md hover:opacity-90">등록하기</button>
+        <div class="flex flex-wrap gap-3">
+          <button id="content-save-btn" onclick="addCard()" class="px-6 py-2 bg-primary text-white rounded-full text-label-md hover:opacity-90">등록하기</button>
+          <button id="content-cancel-edit-btn" onclick="cancelEditCard()" class="hidden px-6 py-2 bg-warm-sand text-deep-charcoal rounded-full text-label-md">수정 취소</button>
           <button onclick="clearContentForm()" class="px-6 py-2 bg-warm-sand text-deep-charcoal rounded-full text-label-md">초기화</button>
         </div>
       </div>
@@ -177,6 +178,7 @@ var curationCards = [];
 var isContentAdmin = false;
 var cardsPage = 1;
 var contentPage = 1;
+var editingCard = null;
 var CARDS_PAGE_SIZE = 6;
 var CONTENT_PAGE_SIZE = 6;
 
@@ -441,6 +443,11 @@ function removeLocalCard(card) {
   })));
 }
 
+function replaceLocalCard(original, updated) {
+  removeLocalCard(original);
+  saveLocalCard(updated);
+}
+
 function cardKey(card) {
   return [card.type || 'youtube', card.url || '', card.title || ''].join('|').toLowerCase();
 }
@@ -477,6 +484,12 @@ function buildContentRow(card) {
   row.innerHTML = '<div class="md:w-24 shrink-0 text-label-sm text-clay-terracotta">' + typeLabel(card.type) + '</div><div class="flex-1 min-w-0"><div class="text-body-md text-deep-charcoal font-medium" style="word-break:keep-all;">' + escapeHtml(card.title) + '</div><div class="text-body-md text-on-surface-variant text-sm line-clamp-1">' + escapeHtml(card.desc || '') + '</div></div><div class="flex items-center gap-2 shrink-0">' + (card.url ? '<a href="' + escapeHtml(card.url) + '" target="_blank" class="text-primary text-label-sm hover:underline flex items-center">열기 <span class="material-symbols-outlined ml-1 text-sm">arrow_outward</span></a>' : '<span class="text-label-sm text-on-surface-variant">링크 없음</span>') + '</div>';
   if (isContentAdmin) {
     var actions = row.querySelector('.shrink-0:last-child');
+    var editBtn = document.createElement('button');
+    editBtn.className = 'w-9 h-9 rounded-full bg-warm-sand text-deep-charcoal flex items-center justify-center hover:opacity-80';
+    editBtn.setAttribute('aria-label', '수정');
+    editBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">edit</span>';
+    editBtn.onclick = function() { startEditCard(card); };
+    actions.appendChild(editBtn);
     var deleteBtn = document.createElement('button');
     deleteBtn.className = 'w-9 h-9 rounded-full bg-warm-sand text-deep-charcoal flex items-center justify-center hover:opacity-80';
     deleteBtn.setAttribute('aria-label', '삭제');
@@ -621,6 +634,38 @@ function clearContentForm() {
   document.getElementById('e-image').value = '';
 }
 
+function setEditMode(card) {
+  editingCard = card || null;
+  var saveBtn = document.getElementById('content-save-btn');
+  var cancelBtn = document.getElementById('content-cancel-edit-btn');
+  if (saveBtn) saveBtn.textContent = editingCard ? '수정 저장' : '등록하기';
+  if (cancelBtn) cancelBtn.classList.toggle('hidden', !editingCard);
+}
+
+function startEditCard(card) {
+  if (!isContentAdmin) { alert('관리자 권한이 필요합니다.'); return; }
+  setEditMode(card);
+  document.getElementById('e-type').value = card.type || 'youtube';
+  document.getElementById('e-url').value = card.url || '';
+  document.getElementById('e-title').value = card.title || '';
+  document.getElementById('e-desc').value = card.desc || '';
+  document.getElementById('e-image').value = card.image || '';
+  var panel = document.getElementById('content-admin-panel');
+  if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelEditCard() {
+  setEditMode(null);
+  clearContentForm();
+}
+
+function replaceCardInMemory(original, updated) {
+  var originalKey = cardKey(original);
+  curationCards = curationCards.map(function(item) {
+    return cardKey(item) === originalKey ? updated : item;
+  });
+}
+
 function showCardsGrid() {
   var grid = document.getElementById('cards-grid');
   grid.classList.remove('invisible');
@@ -665,33 +710,42 @@ async function addCard() {
   var image = document.getElementById('e-image').value.trim();
   if (!title) { alert('제목을 입력해주세요.'); return; }
   if (!url) { alert('연결 링크를 입력해주세요.'); return; }
-  var btn = document.querySelector('#content-admin-panel button[onclick="addCard()"]');
-  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
-  var card = { type: type, url: url, title: title, desc: desc, image: image, createdAt: new Date().toISOString() };
+  var btn = document.getElementById('content-save-btn');
+  var isEditing = !!editingCard;
+  var originalCard = editingCard;
+  if (btn) { btn.disabled = true; btn.textContent = isEditing ? '수정 중...' : '저장 중...'; }
+  var card = { type: type, url: url, title: title, desc: desc, image: image, createdAt: isEditing ? (originalCard.createdAt || '') : new Date().toISOString() };
+  if (isEditing && originalCard.rowNumber) card.rowNumber = originalCard.rowNumber;
   var savedRemote = false;
   try {
     var res = await fetch('/api/cards', {
-      method: 'POST',
+      method: isEditing && originalCard.rowNumber ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(card)
     });
-    if (!res.ok) throw new Error('저장 실패 (' + res.status + ')');
+    if (!res.ok) throw new Error((isEditing ? '수정 실패' : '저장 실패') + ' (' + res.status + ')');
     savedRemote = true;
   } catch(e) {
-    console.warn('원격 저장 실패:', e);
-    alert('원격 저장 중 오류가 발생해 이 브라우저에 임시 저장했습니다: ' + e.message);
+    console.warn(isEditing ? '원격 수정 실패:' : '원격 저장 실패:', e);
+    alert((isEditing ? '원격 수정' : '원격 저장') + ' 중 오류가 발생해 이 브라우저에 임시 저장했습니다: ' + e.message);
   } finally {
-    saveLocalCard(card);
+    if (isEditing) {
+      replaceLocalCard(originalCard, card);
+      replaceCardInMemory(originalCard, card);
+    } else {
+      saveLocalCard(card);
+    }
     if (savedRemote) {
       cardsPage = 1;
       contentPage = 1;
+      if (isEditing) removeLocalCard(card);
       await loadCards();
     } else {
       cardsPage = 1;
       contentPage = 1;
-      renderCards(mergeCards(curationCards, [card]));
+      renderCards(isEditing ? curationCards : mergeCards(curationCards, [card]));
     }
-    clearContentForm();
+    cancelEditCard();
     if (btn) { btn.disabled = false; btn.textContent = '등록하기'; }
   }
 }
