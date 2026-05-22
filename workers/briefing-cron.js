@@ -379,7 +379,7 @@ async function readFromSheets(env) {
   }
 
   const data = await res.json();
-  return (data.values ?? []).map(([date, category, title, summary, source, link, image]) => ({
+  const rows = (data.values ?? []).map(([date, category, title, summary, source, link, image]) => ({
     date: date ?? '',
     category: category ?? '',
     title: title ?? '',
@@ -388,6 +388,18 @@ async function readFromSheets(env) {
     link: link ?? '',
     image: image || fallbackImage(category),
   })).filter((item) => !isPlaceholderBriefing(item));
+
+  const seen = new Set();
+  return rows.reverse().filter((item) => {
+    const key = [
+      String(item.date || '').trim(),
+      String(item.category || '').trim(),
+      String(item.title || '').trim(),
+    ].join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).reverse();
 }
 
 function isPlaceholderBriefing(item) {
