@@ -345,25 +345,40 @@
     return '';
   }
 
-  function pickDiverseCurationCards(cards) {
-    var normalized = (cards || []).filter(function(card) { return card && card.title; }).reverse();
-    var picked = [];
+  function pickLatestCurationCards(cards) {
     var seen = {};
-    ['youtube', 'book', 'seminar'].forEach(function(type) {
-      var found = normalized.find(function(card) {
-        return (card.type || 'youtube') === type && !seen[(card.type || 'youtube') + '|' + card.url + '|' + card.title];
+    var normalized = (cards || [])
+      .map(function(card, index) { return { card: card, index: index }; })
+      .filter(function(item) { return item.card && item.card.title; })
+      .sort(function(a, b) {
+        var aTime = Date.parse(a.card.createdAt || a.card.insertedAt || '');
+        var bTime = Date.parse(b.card.createdAt || b.card.insertedAt || '');
+        if (!isNaN(aTime) || !isNaN(bTime)) {
+          if (isNaN(aTime)) return 1;
+          if (isNaN(bTime)) return -1;
+          if (bTime !== aTime) return bTime - aTime;
+        }
+        var aRow = Number(a.card.rowNumber) || 0;
+        var bRow = Number(b.card.rowNumber) || 0;
+        if (aRow || bRow) return bRow - aRow;
+        return b.index - a.index;
+      })
+      .map(function(item) { return item.card; })
+      .filter(function(card) {
+        var key = (card.type || 'youtube') + '|' + card.url + '|' + card.title;
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
       });
-      if (found) {
-        picked.push(found);
-        seen[(found.type || 'youtube') + '|' + found.url + '|' + found.title] = true;
+    var picked = normalized.slice(0, 3);
+    if (picked.length && !getThumb(picked[0])) {
+      var visual = normalized.find(function(card) {
+        return getThumb(card) && picked.indexOf(card) === -1;
+      });
+      if (visual) {
+        picked = [visual].concat(picked).slice(0, 3);
       }
-    });
-    normalized.forEach(function(card) {
-      var key = (card.type || 'youtube') + '|' + card.url + '|' + card.title;
-      if (picked.length >= 3 || seen[key]) return;
-      picked.push(card);
-      seen[key] = true;
-    });
+    }
     return picked;
   }
 
@@ -390,7 +405,7 @@
       var res = await fetch('/api/cards');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var cards = await res.json();
-      cards = Array.isArray(cards) ? pickDiverseCurationCards(cards) : [];
+      cards = Array.isArray(cards) ? pickLatestCurationCards(cards) : [];
       if (!cards.length) throw new Error('empty');
       grid.innerHTML = cards.map(buildHomeCurationCard).join('');
     } catch(e) {
