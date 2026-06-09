@@ -89,6 +89,28 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/briefing/debug-feeds' && request.method === 'GET') {
+      try {
+        requireEnv(env, ['BRIEFING_RUN_TOKEN']);
+        const token = request.headers.get('x-briefing-token') || url.searchParams.get('token');
+        if (token !== env.BRIEFING_RUN_TOKEN) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { ...cors, 'Content-Type': 'application/json' },
+          });
+        }
+        const debug = await debugKoreanNewsCandidates();
+        return new Response(JSON.stringify(debug), {
+          headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     if (url.pathname === '/api/briefing/import' && request.method === 'POST') {
       try {
         requireEnv(env, ['BRIEFING_RUN_TOKEN', 'GOOGLE_SHEET_ID', 'GOOGLE_SERVICE_ACCOUNT']);
@@ -145,7 +167,7 @@ export default {
 
 async function runBriefing(env) {
   requireEnv(env, ['ANTHROPIC_API_KEY', 'GOOGLE_SHEET_ID', 'GOOGLE_SERVICE_ACCOUNT']);
-  const items = await enrichBriefingImages(await fetchBriefingFromClaude(env.ANTHROPIC_API_KEY));
+  const items = await enrichBriefingImages(await fetchBriefingFromClaude(env));
   await appendToSheets(env, items);
   if (env.NEWSLETTER_ENABLED === 'true') {
     try {
@@ -175,18 +197,18 @@ function normalizeBriefingItems(items) {
 
 // ─── Claude API (web_search 아젠틱 루프) ───────────────────────────────────
 
-async function fetchBriefingFromClaude(apiKey) {
+async function fetchBriefingFromClaude(env) {
   const today = getKSTDateStr();
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'x-api-key': apiKey,
+      'x-api-key': env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: env.CLAUDE_MODEL || 'claude-sonnet-4-6',
       max_tokens: 4096,
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
       messages: [
@@ -208,6 +230,10 @@ async function fetchBriefingFromClaude(apiKey) {
 
   if (!res.ok) {
     const err = await res.text();
+    if (res.status === 403 && /Request not allowed/i.test(err)) {
+      console.warn('[briefing-cron] Anthropic web_search not allowed. Falling back to feed-based briefing.');
+      return fetchBriefingFromFeeds(env, today);
+    }
     throw new Error(`Claude API ${res.status}: ${err}`);
   }
 
@@ -228,6 +254,282 @@ async function fetchBriefingFromClaude(apiKey) {
   return items;
 }
 
+// ─── Anthropic web_search 권한이 없을 때 쓰는 한국어 뉴스 fallback ─────────────
+
+const BRIEFING_FEED_QUERIES = [
+  '대학 온라인 교육 콘텐츠 제작',
+  '대학 원격교육 이러닝 스튜디오',
+  '공공기관 AI 교육 플랫폼 SW 개발',
+  '대학 XR 실감형 콘텐츠 구축',
+  '교육부 에듀테크 개인정보 보안',
+  'AI 모델 국내 공식 블로그',
+  'AX 전환 대학 기관 교육',
+];
+
+async function fetchBriefingFromFeeds(env, today) {
+  const candidates = await fetchKoreanNewsCandidates();
+  if (!candidates.length) {
+    throw new Error('Anthropic web_search 권한이 없고, fallback 뉴스 후보도 찾지 못했습니다.');
+  }
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: env.CLAUDE_MODEL || 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      messages: [
+        {
+          role: 'user',
+          content:
+            `오늘 날짜(${today}) 기준 브리핑에 넣을 최신 정보 5~8개를 아래 후보 목록에서만 골라줘.\n` +
+            `우리는 대학·기관 대상으로 온라인 교육 콘텐츠 제작, 스튜디오 구축, SW 개발을 하는 회사다.\n` +
+            `선정 기준: 최근 7일 이내, 한국어 출처 우선, 대학/기관 영업·제안·사업기회 관련성, AI/AX/에듀테크/SW/스튜디오/XR 관련성.\n` +
+            `카테고리별로 억지로 하나씩 맞추지 말고, 최신성과 적합성이 높은 항목을 우선해.\n` +
+            `link는 후보의 link를 그대로 사용하고, date는 브리핑 발행일인 ${today}로 통일해.\n` +
+            `summary는 후보 제목/설명만 근거로 과장 없이 2문장으로 작성해.\n` +
+            `JSON 배열만 반환해. 다른 설명은 쓰지 마.\n` +
+            `[{"date":"YYYY-MM-DD","category":"카테고리명","title":"제목","summary":"2문장 요약","source":"출처명","link":"URL","image":""}]\n\n` +
+            `후보 목록:\n${JSON.stringify(candidates.slice(0, 40))}`,
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    if (res.status === 403 && /Request not allowed/i.test(err)) {
+      console.warn('[briefing-cron] Anthropic fallback not allowed. Using deterministic feed summary.');
+      return buildBriefingFromCandidates(candidates, today);
+    }
+    throw new Error(`Claude API fallback ${res.status}: ${err}`);
+  }
+
+  const data = await res.json();
+  if (data.stop_reason !== 'end_turn') {
+    throw new Error(`Claude API fallback 응답 미완료: stop_reason=${data.stop_reason}`);
+  }
+
+  const text = data.content
+    .filter((c) => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n');
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error('fallback 응답에서 JSON 배열을 찾을 수 없음');
+
+  const items = JSON.parse(match[0]);
+  if (!Array.isArray(items)) throw new Error('Claude fallback 응답이 JSON 배열이 아님');
+  return items;
+}
+
+function buildBriefingFromCandidates(candidates, today) {
+  const selected = candidates
+    .filter((item) => item.title && item.link)
+    .slice(0, 8)
+    .map((item) => ({
+      date: today,
+      category: inferBriefingCategory(`${item.title} ${item.description}`),
+      title: cleanBriefingTitle(item.title),
+      summary: buildCandidateSummary(item),
+      source: item.source || '뉴스',
+      link: item.link,
+      image: item.image || '',
+    }));
+
+  if (!selected.length) {
+    throw new Error('fallback 후보는 찾았지만 브리핑 항목으로 변환할 수 없습니다.');
+  }
+  return selected;
+}
+
+function inferBriefingCategory(text) {
+  const value = String(text || '').toLowerCase();
+  if (/xr|실감|메타버스|스튜디오|영상|콘텐츠|크리에이터|k-콘텐츠/i.test(value)) return '스튜디오·콘텐츠';
+  if (/개인정보|보안|사이버|실태점검/i.test(value)) return '에듀테크 보안';
+  if (/lms|플랫폼|sw|소프트웨어|서비스|솔루션|시스템/i.test(value)) return '교육 플랫폼·SW';
+  if (/mooc|원격|이러닝|온라인|평생교육|강좌/i.test(value)) return '온라인 교육';
+  if (/ai|인공지능|생성형|모델|ax/i.test(value)) return 'AI·AX 트렌드';
+  if (/대학|교육부|공공기관|정부|사업|지원/i.test(value)) return '교육정책·기관';
+  return '브리핑';
+}
+
+function cleanBriefingTitle(title) {
+  return decodeEntities(String(title || '')
+    .replace(/\s+-\s+[^-]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim());
+}
+
+function buildCandidateSummary(item) {
+  const description = cleanBriefingTitle(item.description || '');
+  if (description) {
+    return truncateText(description, 150);
+  }
+  return `${item.source || '관련 출처'}에서 공개한 최신 소식입니다. 대학·기관 대상 콘텐츠 제작, 교육 플랫폼, AI·AX 전환 관점에서 확인할 만한 항목입니다.`;
+}
+
+async function fetchKoreanNewsCandidates() {
+  const feeds = buildNewsFeedUrls();
+
+  const results = await Promise.allSettled(feeds.map(fetchNewsFeed));
+  const items = results
+    .filter((result) => result.status === 'fulfilled')
+    .flatMap((result) => result.value);
+
+  const seen = new Set();
+  return items
+    .filter((item) => isRecentNewsDate(item.publishedAt))
+    .filter((item) => {
+      const key = normalizeText(item.title || item.link);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 60);
+}
+
+function buildGoogleNewsFeedUrls() {
+  return BRIEFING_FEED_QUERIES.map((query) => {
+    const q = `${query} when:7d`;
+    return {
+      provider: 'google',
+      query,
+      url: `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=ko&gl=KR&ceid=KR:ko`,
+    };
+  });
+}
+
+function buildBingNewsFeedUrls() {
+  return BRIEFING_FEED_QUERIES.map((query) => ({
+    provider: 'bing',
+    query,
+    url: `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss&cc=KR&setlang=ko-KR`,
+  }));
+}
+
+function buildNewsFeedUrls() {
+  return [
+    ...buildGoogleNewsFeedUrls(),
+    ...buildBingNewsFeedUrls(),
+  ];
+}
+
+async function fetchNewsFeed(feed) {
+  try {
+    const res = await fetch(feed.url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 XEMI Briefing Bot',
+        Accept: 'application/rss+xml,text/xml',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      },
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    return parseNewsFeedItems(xml, feed.provider);
+  } catch (_) {
+    return [];
+  }
+}
+
+async function fetchNewsFeedDebug(feed) {
+  const res = await fetch(feed.url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 XEMI Briefing Bot',
+      Accept: 'application/rss+xml,text/xml',
+      'Accept-Language': 'ko-KR,ko;q=0.9',
+    },
+  });
+  const text = await res.text();
+  const parsed = parseNewsFeedItems(text, feed.provider);
+  return {
+    provider: feed.provider,
+    query: feed.query,
+    ok: res.ok,
+    status: res.status,
+    length: text.length,
+    itemTags: (text.match(/<item\b/gi) || []).length,
+    parsed: parsed.length,
+    sampleTitle: parsed[0]?.title || '',
+    sampleDate: parsed[0]?.publishedAt || '',
+  };
+}
+
+async function debugKoreanNewsCandidates() {
+  const feeds = buildNewsFeedUrls();
+  const results = await Promise.allSettled(feeds.map(fetchNewsFeedDebug));
+  const feedsDebug = results.map((result, index) => (
+    result.status === 'fulfilled'
+      ? result.value
+      : {
+        provider: feeds[index]?.provider || '',
+        query: feeds[index]?.query || '',
+        error: result.reason?.message || String(result.reason),
+      }
+  ));
+  const candidates = await fetchKoreanNewsCandidates();
+  return {
+    totalCandidates: candidates.length,
+    feeds: feedsDebug,
+    sample: candidates.slice(0, 5),
+  };
+}
+
+async function fetchGoogleNewsFeed(feedUrl) {
+  return fetchNewsFeed({ provider: 'google', query: '', url: feedUrl });
+}
+
+function parseNewsFeedItems(xml, provider = 'google') {
+  return [...String(xml || '').matchAll(/<item\b[\s\S]*?<\/item>/gi)]
+    .map((match) => {
+      const block = match[0];
+      return {
+        title: cleanFeedText(pickXmlTag(block, 'title')),
+        link: normalizeFeedLink(cleanFeedText(pickXmlTag(block, 'link')), provider),
+        source: cleanFeedText(pickXmlTag(block, provider === 'bing' ? 'News:Source' : 'source')) || (provider === 'bing' ? 'Bing News' : 'Google News'),
+        description: truncateText(cleanFeedText(pickXmlTag(block, 'description')), 180),
+        publishedAt: cleanFeedText(pickXmlTag(block, 'pubDate')),
+        image: cleanFeedText(pickXmlTag(block, provider === 'bing' ? 'News:Image' : 'media:content')),
+      };
+    })
+    .filter((item) => item.title && looksLikeUrl(item.link));
+}
+
+function normalizeFeedLink(link, provider) {
+  const clean = decodeEntities(link);
+  if (provider !== 'bing') return clean;
+  try {
+    const url = new URL(clean);
+    const original = url.searchParams.get('url');
+    return original ? decodeURIComponent(original) : clean;
+  } catch (_) {
+    return clean;
+  }
+}
+
+function pickXmlTag(block, tagName) {
+  const match = String(block || '').match(new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i'));
+  return match ? match[1] : '';
+}
+
+function cleanFeedText(value) {
+  return decodeEntities(String(value || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim());
+}
+
+function isRecentNewsDate(value) {
+  if (!value) return true;
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return true;
+  return Date.now() - time <= 8 * 24 * 60 * 60 * 1000;
+}
+
 // ─── 기사 대표 이미지 자동 추출 ─────────────────────────────────────────────
 
 function decodeEntities(value) {
@@ -236,7 +538,9 @@ function decodeEntities(value) {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
+    .replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
 }
 
 function absoluteUrl(image, pageUrl) {
@@ -458,7 +762,9 @@ async function readFromSheets(env) {
     byDate.get(date).push(item);
   }
 
-  return Array.from(byDate.values()).flatMap((items) => items.slice(-8));
+  return Array.from(byDate.entries())
+    .sort(([dateA], [dateB]) => String(dateB).localeCompare(String(dateA)))
+    .flatMap(([, items]) => items.slice(-8).reverse());
 }
 
 function isPlaceholderBriefing(item) {

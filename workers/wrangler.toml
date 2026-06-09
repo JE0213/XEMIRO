@@ -1,6 +1,7 @@
 name = "xemiro-briefing"
 main = "briefing-cron.js"
 compatibility_date = "2024-01-01"
+account_id = "3085a7421f8d59ea9e424fb5ef1a5eb5"
 
 [triggers]
 crons = ["0 0 * * *"]
