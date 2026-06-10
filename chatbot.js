@@ -182,10 +182,16 @@
 
   function findAnswer(query, kb) {
     var low = normalize(query);
+    var terms = queryTerms(query);
     var best = null;
     var bestScore = 0;
     kb.forEach(function (item) {
       var score = 0;
+      var title = getAnswerTitle(item);
+      var answerText = stripHtml(item.ans || '');
+      var titleNorm = normalize(title);
+      var answerNorm = normalize(answerText);
+      var srcNorm = normalize(item.src || '');
       (item.keys || []).forEach(function (key) {
         var normalizedKey = normalize(key);
         if (!normalizedKey) return;
@@ -193,12 +199,26 @@
         else if (low.includes(normalizedKey)) score += normalizedKey.length * 2;
         else if (normalizedKey.includes(low)) score += Math.min(low.length, normalizedKey.length);
       });
+      if (titleNorm) {
+        if (low === titleNorm) score += 900 + titleNorm.length;
+        else if (low.includes(titleNorm) || titleNorm.includes(low)) score += Math.min(low.length, titleNorm.length) * 3;
+      }
+      if (answerNorm && low.length >= 2 && answerNorm.includes(low)) score += Math.min(low.length, 40);
+      if (srcNorm && low.length >= 2 && srcNorm.includes(low)) score += 12;
+      terms.forEach(function (term) {
+        if (titleNorm.includes(term)) score += 14;
+        (item.keys || []).forEach(function (key) {
+          if (normalize(key).includes(term)) score += 10;
+        });
+        if (answerNorm.includes(term)) score += 3;
+        if (srcNorm.includes(term)) score += 4;
+      });
       if (score > bestScore) {
         bestScore = score;
         best = item;
       }
     });
-    if (best && bestScore > 0) {
+    if (best && bestScore >= 4) {
       return {
         html: best.ans + '<div class="xemi-chatbot__source">출처: ' + escapeHtml(best.src || '위키') + '</div>',
       };
@@ -211,7 +231,26 @@
   }
 
   function normalize(text) {
-    return String(text || '').toLowerCase().replace(/\s/g, '');
+    return String(text || '').toLowerCase().replace(/[^\u3131-\u318e\uac00-\ud7a3a-z0-9]/g, '');
+  }
+
+  function queryTerms(text) {
+    var stops = ['알려줘', '뭐야', '무엇', '어떻게', '어디서', '확인', '싶어', '되는지', '해주세요', '해줘'];
+    return String(text || '').toLowerCase()
+      .split(/[^\u3131-\u318e\uac00-\ud7a3a-z0-9]+/g)
+      .map(function (term) { return normalize(term); })
+      .filter(function (term, index, arr) {
+        return term.length >= 2 && stops.indexOf(term) === -1 && arr.indexOf(term) === index;
+      });
+  }
+
+  function stripHtml(html) {
+    return String(html || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&amp;|&lt;|&gt;|&quot;|&#39;/g, ' ');
+  }
+
+  function getAnswerTitle(item) {
+    var match = String(item && item.ans || '').match(/<span class="wstag">([^<]+)<\/span>/);
+    return match ? match[1] : ((item && item.keys && item.keys[0]) || '');
   }
 
   function escapeHtml(text) {

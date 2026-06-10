@@ -219,20 +219,53 @@ const KB=[
 let curCat='all';
 function setCat(cat,el){curCat=cat;document.querySelectorAll('.wcat').forEach(c=>c.classList.remove('on'));el.classList.add('on');renderChips();}
 function findAns(q) {
-  var low = q.toLowerCase().replace(/\s/g, '');
+  var low = normalizeWikiText(q);
+  var terms = queryTerms(q);
   var best = null, bestScore = 0;
   for (var i = 0; i < KB.length; i++) {
     var item = KB[i], score = 0;
+    var title = getTopicTitle(item);
+    var titleNorm = normalizeWikiText(title);
+    var answerNorm = normalizeWikiText(stripHtml(item.ans || ''));
+    var srcNorm = normalizeWikiText(item.src || '');
     for (var j = 0; j < item.keys.length; j++) {
-      var kc = item.keys[j].toLowerCase().replace(/\s/g, '');
+      var kc = normalizeWikiText(item.keys[j]);
       if (low === kc) score += 1000 + kc.length;
       else if (low.includes(kc)) score += kc.length * 2;
       else if (kc.includes(low)) score += Math.min(low.length, kc.length);
     }
+    if (titleNorm) {
+      if (low === titleNorm) score += 900 + titleNorm.length;
+      else if (low.includes(titleNorm) || titleNorm.includes(low)) score += Math.min(low.length, titleNorm.length) * 3;
+    }
+    if (answerNorm && low.length >= 2 && answerNorm.includes(low)) score += Math.min(low.length, 40);
+    if (srcNorm && low.length >= 2 && srcNorm.includes(low)) score += 12;
+    for (var t = 0; t < terms.length; t++) {
+      var term = terms[t];
+      if (titleNorm.includes(term)) score += 14;
+      for (var k = 0; k < item.keys.length; k++) {
+        if (normalizeWikiText(item.keys[k]).includes(term)) score += 10;
+      }
+      if (answerNorm.includes(term)) score += 3;
+      if (srcNorm.includes(term)) score += 4;
+    }
     if (score > bestScore) { bestScore = score; best = item; }
   }
-  if (best && bestScore > 0) return { ans: best.ans, src: best.src };
+  if (best && bestScore >= 4) return { ans: best.ans, src: best.src };
   return { ans: '아직 위키에 등록되지 않은 내용이에요 🙏<br>담당자에게 문의하거나 위키 업데이트 요청을 남겨주세요!', src: null };
+}
+function normalizeWikiText(text) {
+  return String(text || '').toLowerCase().replace(/[^\u3131-\u318e\uac00-\ud7a3a-z0-9]/g, '');
+}
+function queryTerms(text) {
+  var stops = ['알려줘','뭐야','무엇','어떻게','어디서','확인','싶어','되는지','해주세요','해줘'];
+  return String(text || '').toLowerCase()
+    .split(/[^\u3131-\u318e\uac00-\ud7a3a-z0-9]+/g)
+    .map(function(term){ return normalizeWikiText(term); })
+    .filter(function(term, index, arr){ return term.length >= 2 && stops.indexOf(term) === -1 && arr.indexOf(term) === index; });
+}
+function stripHtml(html) {
+  return String(html || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&amp;|&lt;|&gt;|&quot;|&#39;/g, ' ');
 }
 function renderAnswer(r) {
   var area = document.getElementById('answer-area');
@@ -306,5 +339,5 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
-<script src="chatbot.js?v=20260610-faq5"></script>
+<script src="chatbot.js?v=20260610-faq6"></script>
 </body></html>
