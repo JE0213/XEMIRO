@@ -220,7 +220,8 @@ async function fetchBriefingFromClaude(env) {
             `우리는 대학·기관 대상으로 온라인 교육 콘텐츠 제작, 스튜디오 구축, SW 개발을 하는 회사다. 관심 영역은 검색 범위와 분류 기준일 뿐이며, 영역별로 반드시 1개씩 맞추지 마. 최신성, 신뢰도, 발주/제안/사업기회와의 관련성을 우선해.\n` +
             `출처는 한국어 뉴스, 공공기관 공지, 정부 보도자료, 국내 공식 블로그를 우선해. 해외 AI 모델/트렌드도 가능하면 한국어 해설 기사나 한국어 공식 페이지를 사용해.\n` +
             `date는 브리핑 발행일인 ${today}로 통일해. 단, 원문 공개일/보도일이 최근 7일을 벗어난 항목은 제외해.\n` +
-            `각 항목은 실제 원문 URL을 포함하고, 제목은 과장 없이 간결하게 작성.\n` +
+            `각 항목의 title, summary, source, link, image는 반드시 같은 원문/검색결과에서 가져와. 서로 다른 기사나 검색결과의 제목과 URL을 섞지 마.\n` +
+            `link는 title/summary의 근거가 되는 실제 원문 URL이어야 하며, 확신이 없으면 그 항목은 제외해. 제목은 과장 없이 간결하게 작성.\n` +
             `JSON 형식으로만 반환 (다른 텍스트 없이 배열만):\n` +
             `[{"date":"YYYY-MM-DD","category":"카테고리명","title":"제목","summary":"2-3문장 요약","source":"출처명","link":"URL","image":"이미지 URL 또는 빈 문자열"}]`,
         },
@@ -566,16 +567,82 @@ function pickMetaImage(html, pageUrl) {
   return '';
 }
 
-function fallbackImage(category) {
+function pickMetaTitle(html) {
+  const patterns = [
+    /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["'][^>]*>/i,
+    /<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:title["'][^>]*>/i,
+    /<title[^>]*>([\s\S]*?)<\/title>/i,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match && match[1]) return cleanFeedText(match[1]);
+  }
+  return '';
+}
+
+function fallbackImage(category, seed = '') {
   const images = {
-    'AI 트렌드': 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1200&q=80',
-    'AI 모델': 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&q=80',
-    '이러닝': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80',
-    '대학 교육정책': 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1200&q=80',
-    '대학 재정지원사업': 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1200&q=80',
-    '에듀테크': 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&q=80',
+    ai: [
+      'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1200&q=80',
+      'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&q=80',
+      'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&q=80',
+    ],
+    elearning: [
+      'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80',
+      'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&q=80',
+      'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=1200&q=80',
+    ],
+    policy: [
+      'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1200&q=80',
+      'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=1200&q=80',
+      'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1200&q=80',
+    ],
+    studio: [
+      'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=1200&q=80',
+      'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1200&q=80',
+      'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=1200&q=80',
+    ],
+    xr: [
+      'https://images.unsplash.com/photo-1622979135225-d2ba269cf1ac?w=1200&q=80',
+      'https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=1200&q=80',
+      'https://images.unsplash.com/photo-1617802690992-15d93263d3a9?w=1200&q=80',
+    ],
+    platform: [
+      'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&q=80',
+      'https://images.unsplash.com/photo-1551434678-e076c223a692?w=1200&q=80',
+      'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=1200&q=80',
+    ],
+    default: [
+      'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1200&q=80',
+      'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=1200&q=80',
+      'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1200&q=80',
+    ],
   };
-  return images[category] || 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1200&q=80';
+  const key = fallbackImageGroup(category);
+  const choices = images[key] || images.default;
+  return choices[stableIndex(`${category}|${seed}`, choices.length)];
+}
+
+function fallbackImageGroup(category) {
+  const text = String(category || '').toLowerCase();
+  if (/xr|실감|메타버스|가상/.test(text)) return 'xr';
+  if (/스튜디오|콘텐츠|영상|제작/.test(text)) return 'studio';
+  if (/lms|플랫폼|sw|소프트웨어|에듀테크/.test(text)) return 'platform';
+  if (/원격|이러닝|온라인|강좌|교육/.test(text)) return 'elearning';
+  if (/정책|공공|정부|교육부|사업|재정/.test(text)) return 'policy';
+  if (/ai|ax|gemini|gpt|모델/.test(text)) return 'ai';
+  return 'default';
+}
+
+function stableIndex(value, length) {
+  let hash = 0;
+  const text = String(value || '');
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % Math.max(length, 1);
 }
 
 async function fetchArticleImage(link) {
@@ -583,13 +650,17 @@ async function fetchArticleImage(link) {
   try {
     const pageUrl = new URL(link);
     if (!/^https?:$/.test(pageUrl.protocol)) return '';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(pageUrl.href, {
       headers: {
         'User-Agent': 'Mozilla/5.0 XEMI Briefing Bot',
         Accept: 'text/html,application/xhtml+xml',
         'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
       },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!res.ok) return '';
     const html = await res.text();
     return pickMetaImage(html.slice(0, 200000), pageUrl.href);
@@ -598,11 +669,44 @@ async function fetchArticleImage(link) {
   }
 }
 
+async function fetchArticlePreview(link) {
+  if (!link) return { title: '', image: '' };
+  try {
+    const pageUrl = new URL(link);
+    if (!/^https?:$/.test(pageUrl.protocol)) return { title: '', image: '' };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(pageUrl.href, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 XEMI Briefing Bot',
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return { title: '', image: '' };
+    const html = (await res.text()).slice(0, 200000);
+    return {
+      title: pickMetaTitle(html),
+      image: pickMetaImage(html, pageUrl.href),
+    };
+  } catch (_) {
+    return { title: '', image: '' };
+  }
+}
+
 async function enrichBriefingImages(items) {
-  return Promise.all(items.map(async (item) => {
-    const image = item.image || (await fetchArticleImage(item.link));
-    return { ...item, image: image || fallbackImage(item.category) };
+  const enriched = await Promise.all(items.map(async (item) => {
+    const preview = await fetchArticlePreview(item.link);
+    if (preview.title && !isMatchingArticleTitle(item, preview.title)) {
+      console.warn(`[briefing-cron] link/title mismatch skipped: ${item.title} -> ${preview.title}`);
+      return null;
+    }
+    const image = item.image || preview.image || (await fetchArticleImage(item.link));
+    return { ...item, image: image || fallbackImage(item.category, item.title || item.link) };
   }));
+  return enriched.filter(Boolean);
 }
 
 // ─── Google Sheets JWT 인증 ────────────────────────────────────────────────
@@ -683,15 +787,25 @@ async function appendToSheets(env, items) {
   const sa = readServiceAccount(env);
   const token = await getAccessToken(sa);
   const range = encodeURIComponent(getBriefingRange(env));
+  const existingKeys = await readExistingBriefingKeys(env, token);
+  const incomingKeys = new Set();
+  const filteredItems = items.filter((item) => isRelevantBriefingItem(item)).filter((item) => {
+    const keys = getBriefingDedupKeys(item);
+    if (!keys.length || keys.some((key) => existingKeys.has(key) || incomingKeys.has(key))) return false;
+    keys.forEach((key) => incomingKeys.add(key));
+    return true;
+  });
 
-  const values = items.map((item) => [
+  if (!filteredItems.length) return;
+
+  const values = filteredItems.map((item) => [
     item.date ?? '',
     item.category ?? '',
     item.title ?? '',
     item.summary ?? '',
     item.source ?? '',
     item.link ?? '',
-    item.image ?? fallbackImage(item.category),
+    item.image ?? fallbackImage(item.category, item.title || item.link),
     item.status || 'published',
   ]);
 
@@ -711,6 +825,21 @@ async function appendToSheets(env, items) {
     const err = await res.text();
     throw new Error(`Sheets 쓰기 실패: ${err}`);
   }
+}
+
+async function readExistingBriefingKeys(env, token) {
+  const range = encodeURIComponent(getBriefingRange(env, 2));
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${range}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  if (!res.ok) return new Set();
+
+  const data = await res.json();
+  return new Set((data.values ?? [])
+    .flatMap(([date, category, title, summary, source, link]) => getBriefingDedupKeys({ date, title, link }))
+    .filter(Boolean));
 }
 
 // ─── Google Sheets 읽기 ────────────────────────────────────────────────────
@@ -739,19 +868,15 @@ async function readFromSheets(env) {
     summary: summary ?? '',
     source: source ?? '',
     link: link ?? '',
-    image: image || fallbackImage(category),
+    image: normalizeBriefingImage(image, category, `${title || ''} ${link || ''}`),
     status: normalizeBriefingStatus(status),
-  })).filter((item) => !isPlaceholderBriefing(item) && isPublishedBriefing(item));
+  })).filter((item) => !isPlaceholderBriefing(item) && isPublishedBriefing(item) && isRelevantBriefingItem(item));
 
   const seen = new Set();
   const deduped = rows.reverse().filter((item) => {
-    const key = [
-      String(item.date || '').trim(),
-      String(item.category || '').trim(),
-      String(item.title || '').trim(),
-    ].join('|');
-    if (seen.has(key)) return false;
-    seen.add(key);
+    const keys = getBriefingDedupKeys(item);
+    if (!keys.length || keys.some((key) => seen.has(key))) return false;
+    keys.forEach((key) => seen.add(key));
     return true;
   }).reverse();
 
@@ -788,6 +913,24 @@ function isPlaceholderBriefing(item) {
 
 function normalizeBriefingStatus(status) {
   return String(status || 'published').trim().toLowerCase();
+}
+
+function normalizeBriefingImage(image, category, seed = '') {
+  const value = String(image || '').trim();
+  if (!value || isLegacyFallbackImage(value)) return fallbackImage(category, seed);
+  return value;
+}
+
+function isLegacyFallbackImage(value) {
+  return [
+    'photo-1497366754035-f200968a6e72',
+    'photo-1485827404703-89b55fcc595e',
+    'photo-1677442136019-21780ecad995',
+    'photo-1516321318423-f06f85e504b3',
+    'photo-1523050854058-8df90110c9f1',
+    'photo-1554224155-6726b3ff858f',
+    'photo-1519389950473-47ba0277781c',
+  ].some((needle) => String(value || '').includes(needle));
 }
 
 function isPublishedBriefing(item) {
@@ -834,7 +977,7 @@ function sampleNewsletterItems() {
       summary: '대학과 공공기관에서 콘텐츠 제작, 학습관리, 행정 효율화를 위한 AI 도입 논의가 활발해지고 있습니다. 교육 콘텐츠 제작사에는 AI 기반 제작 프로세스와 운영 자동화 제안 기회가 커지고 있습니다.',
       source: 'XEMIRO Briefing',
       link: 'https://xemi.co.kr/',
-      image: fallbackImage('AI'),
+      image: fallbackImage('AI', '대학 온라인 교육 현장에 생성형 AI 활용 확대'),
     },
     {
       date: today,
@@ -843,7 +986,7 @@ function sampleNewsletterItems() {
       summary: '대학·기관의 스튜디오 구축, XR 콘텐츠, 영상 기반 교육 자산 관리 수요가 이어지고 있습니다. 구축 이후 운영 체계와 콘텐츠 제작 워크플로우까지 함께 제안하는 접근이 중요합니다.',
       source: 'XEMIRO Briefing',
       link: 'https://xemi.co.kr/',
-      image: fallbackImage('스튜디오'),
+      image: fallbackImage('스튜디오', '실감형 스튜디오와 온라인 콘텐츠 고도화 수요 증가'),
     },
     {
       date: today,
@@ -852,7 +995,7 @@ function sampleNewsletterItems() {
       summary: 'LMS, 교육 플랫폼, 학습 데이터 활용이 늘면서 개인정보보호와 보안 기준이 제안 평가의 핵심 요소로 부상하고 있습니다. 개발·운영 제안서에 보안 체계를 명확히 반영할 필요가 있습니다.',
       source: 'XEMIRO Briefing',
       link: 'https://xemi.co.kr/',
-      image: fallbackImage('보안'),
+      image: fallbackImage('보안', '교육 플랫폼과 개인정보보호 기준 점검 필요'),
     },
   ];
 }
@@ -864,14 +1007,14 @@ function sampleCurationItems() {
       title: 'AI 영상 제작 워크플로우 정리',
       desc: '기관 홍보·교육 콘텐츠 제작에 참고할 만한 AI 영상 제작 흐름을 짧게 큐레이션했습니다.',
       url: 'https://xemiro.pages.dev/curation.html',
-      image: fallbackImage('AI'),
+      image: fallbackImage('AI', 'AI 영상 제작 워크플로우 정리'),
     },
     {
       type: 'seminar',
       title: '교육·에듀테크 세미나',
       desc: '대학·공공기관 제안과 사업기회 탐색에 참고할 만한 행사입니다.',
       url: 'https://xemiro.pages.dev/curation.html',
-      image: fallbackImage('seminar'),
+      image: fallbackImage('seminar', '교육 에듀테크 세미나'),
     },
   ];
 }
@@ -938,7 +1081,7 @@ function renderNewsletterSectionTitle(title, desc) {
 }
 
 function renderNewsletterCard(item, kind = 'briefing') {
-  const image = item.image || fallbackImage(item.category);
+  const image = item.image || fallbackImage(item.category, item.title || item.link);
   const url = kind === 'curation' ? envAwareCurationUrl() : envAwareBriefingUrl();
   const action = kind === 'curation' ? '큐레이션에서 보기 →' : '자세히 보기 →';
   return `<article style="display:block;margin:0 0 14px;border:1px solid #eaded2;border-radius:16px;overflow:hidden;background:#fff;">
@@ -967,7 +1110,7 @@ function normalizeCurationForNewsletter(item) {
     summary: item.desc || '재미로 큐레이션에서 이어서 확인해보세요.',
     source: 'XEMIRO Curation',
     link: item.url || envAwareCurationUrl(),
-    image: item.image || fallbackImage(item.type),
+    image: item.image || fallbackImage(item.type, item.title || item.url),
   };
 }
 
@@ -1141,6 +1284,115 @@ function uniqueStrings(values) {
 
 function normalizeText(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function isMatchingArticleTitle(item, pageTitle) {
+  const itemTitle = cleanBriefingTitle(item?.title || '');
+  const actualTitle = cleanBriefingTitle(pageTitle);
+  const itemTitleKey = normalizeText(itemTitle);
+  const actualTitleKey = normalizeText(actualTitle);
+  if (itemTitleKey && actualTitleKey && (itemTitleKey.includes(actualTitleKey) || actualTitleKey.includes(itemTitleKey))) {
+    return true;
+  }
+
+  const titleTokens = briefingTitleTokens(itemTitle);
+  const actualTitleTokens = briefingTitleTokens(actualTitle);
+  if (!titleTokens.length || !actualTitleTokens.length) return true;
+
+  const actualTitleSet = new Set(actualTitleTokens);
+  const titleShared = titleTokens.filter((token) => actualTitleSet.has(token));
+  const titleMeaningfulShared = titleShared.filter((token) => token.length >= 3 || /\d/.test(token));
+  const titleRatio = titleShared.length / Math.min(titleTokens.length, actualTitleTokens.length);
+  if (titleMeaningfulShared.length >= 2 || (titleMeaningfulShared.length >= 1 && titleRatio >= 0.35)) {
+    return true;
+  }
+
+  const expected = briefingTitleTokens(`${itemTitle} ${item?.summary || ''}`);
+  const actual = briefingTitleTokens(pageTitle);
+  if (!expected.length || !actual.length) return true;
+
+  const actualSet = new Set(actual);
+  const shared = expected.filter((token) => actualSet.has(token));
+  const meaningfulShared = shared.filter((token) => token.length >= 3 || /\d/.test(token));
+  const ratio = shared.length / Math.min(expected.length, actual.length);
+  return meaningfulShared.length >= 3 && ratio >= 0.42;
+}
+
+function briefingTitleTokens(value) {
+  const stopwords = new Set([
+    '관련', '최신', '기반', '활용', '위한', '대한', '통해', '에서', '으로', '하고',
+    '및', '등', '뉴스', '기사', '보도', '공개', '발표', '선정', '추진',
+  ]);
+  const tokens = cleanBriefingTitle(value)
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, ' ')
+    .match(/[가-힣a-z0-9]+/g) || [];
+  return [...new Set(tokens
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !stopwords.has(token)))];
+}
+
+function isRelevantBriefingItem(item) {
+  const text = `${item?.category || ''} ${item?.title || ''} ${item?.summary || ''} ${item?.source || ''}`.toLowerCase();
+  const hardReject = [
+    /주식|증시|테마주|수혜주|약세|강세|상한가|하한가/,
+    /피지컬\s*ai|로봇|월드모델|국산화\s*도전/,
+    /반도체|전력\s*솔루션|배터리|자동차|공장|제조\s*공정|cfd|simcenter/,
+    /홈쇼핑|쇼핑엔티|여행방송/,
+    /개인정보|보안|침해|유출|과징금|cpo|개인정보보호/,
+    /클래스팅\s*블로그|blog\.classting\.com\/2026checklist/,
+  ];
+  if (hardReject.some((pattern) => pattern.test(text))) return false;
+
+  const audience = /대학|교육|학교|교원|학생|학습|강의|고등교육|공공|기관|정부|교육부|keris|직무교육|훈련|인재원/.test(text);
+  const service = /콘텐츠|온라인|원격|이러닝|lms|플랫폼|sw|소프트웨어|에듀테크|스튜디오|xr|실감|메타버스|ai\s*교육|디지털\s*교육|강좌|커리큘럼|mooc/.test(text);
+  const officialAi = /구글코리아|openai|anthropic|google|gemini|claude|gpt/.test(text)
+    && /교육|콘텐츠|플랫폼|개발|업무도구|자동화|강의|학습/.test(text);
+
+  return (audience && service) || officialAi;
+}
+
+function isStronglyRelevantBriefingItem(item) {
+  const text = `${item?.category || ''} ${item?.title || ''} ${item?.summary || ''} ${item?.source || ''}`.toLowerCase();
+  const institution = /대학|교육부|keris|한국교육학술정보원|공공기관|인재원|학교|고등교육/.test(text);
+  const coreWork = /원격교육|이러닝|lms|온라인콘텐츠|온라인\s*교육|강좌|커리큘럼|교육\s*플랫폼|스튜디오|xr|실감형|메타버스|콘텐츠\s*제작|ai\s*융합형\s*교육실/.test(text);
+  return institution && coreWork;
+}
+
+function getBriefingDedupKeys(item) {
+  const date = String(item?.date || '').trim();
+  const linkKey = normalizeBriefingUrl(item?.link);
+  const titleKey = normalizeBriefingTitleForDedup(item?.title);
+  return [
+    linkKey ? `${date}|url|${linkKey}` : '',
+    titleKey ? `${date}|title|${titleKey}` : '',
+  ].filter(Boolean);
+}
+
+function normalizeBriefingUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    const params = new URLSearchParams();
+    [...url.searchParams.entries()]
+      .filter(([key]) => !/^(utm_|fbclid$|gclid$|yclid$|igshid$|mc_cid$|mc_eid$)/i.test(key))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([key, val]) => params.append(key, val));
+
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    const pathname = url.pathname.replace(/\/+$/, '') || '/';
+    const query = params.toString();
+    return `${url.protocol}//${host}${pathname}${query ? `?${query}` : ''}`;
+  } catch (_) {
+    return normalizeText(raw);
+  }
+}
+
+function normalizeBriefingTitleForDedup(value) {
+  return normalizeText(cleanBriefingTitle(value)
+    .replace(/[“”"'‘’]/g, '')
+    .replace(/\[[^\]]+\]|\([^)]+\)$/g, ''));
 }
 
 function looksLikeUrl(value) {

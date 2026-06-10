@@ -9,11 +9,11 @@
   };
 
   var suggestions = [
-    '연차 어떻게 신청해?',
-    'ERP 어떻게 접속해?',
-    '영상 포맷 기준 알려줘',
-    '스토리보드 기본 구성이 뭐야?',
-    '와이파이 비번 뭐야?',
+    '연차 쓰기 전에 뭐부터 하면 돼?',
+    'ERP 로그인 정보 다시 알려줘',
+    '반차랑 반반차 시간 기준 알려줘',
+    '개인경비 청구는 어디서 해?',
+    '사무실 와이파이는 어디서 확인해?',
   ];
   var characterSrc = 'assets/xemiro-chatbot.png';
 
@@ -189,7 +189,8 @@
       (item.keys || []).forEach(function (key) {
         var normalizedKey = normalize(key);
         if (!normalizedKey) return;
-        if (low.includes(normalizedKey)) score += normalizedKey.length * 2;
+        if (low === normalizedKey) score += 1000 + normalizedKey.length;
+        else if (low.includes(normalizedKey)) score += normalizedKey.length * 2;
         else if (normalizedKey.includes(low)) score += Math.min(low.length, normalizedKey.length);
       });
       if (score > bestScore) {
