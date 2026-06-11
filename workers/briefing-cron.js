@@ -165,10 +165,30 @@ export default {
 
 // ─── 브리핑 실행 ───────────────────────────────────────────────────────────
 
+const MIN_BRIEFING_ITEMS = 5;
+const MAX_BRIEFING_ITEMS = 8;
+
 async function runBriefing(env) {
   requireEnv(env, ['ANTHROPIC_API_KEY', 'GOOGLE_SHEET_ID', 'GOOGLE_SERVICE_ACCOUNT']);
-  const items = await enrichBriefingImages(await fetchBriefingFromClaude(env));
-  await appendToSheets(env, items);
+  const today = getKSTDateStr();
+  const generated = normalizeBriefingItems(await fetchBriefingFromClaude(env));
+  let items = generated;
+
+  if (items.length < MIN_BRIEFING_ITEMS) {
+    console.warn(`[briefing-cron] Claude returned only ${items.length} items. Backfilling from news feeds.`);
+    const fallback = normalizeBriefingItems(await fetchBriefingFromFeeds(env, today));
+    items = mergeBriefingItems([...items, ...fallback]).slice(0, MAX_BRIEFING_ITEMS);
+  }
+
+  items = await enrichBriefingImages(items);
+  if (items.length < MIN_BRIEFING_ITEMS) {
+    console.warn(`[briefing-cron] Enriched briefing has only ${items.length} items. Adding deterministic feed summaries.`);
+    const candidates = await fetchKoreanNewsCandidates();
+    const deterministic = normalizeBriefingItems(buildBriefingFromCandidates(candidates, today));
+    items = mergeBriefingItems([...items, ...deterministic]).slice(0, MAX_BRIEFING_ITEMS);
+  }
+
+  const savedCount = await appendToSheets(env, items);
   if (env.NEWSLETTER_ENABLED === 'true') {
     try {
       const curationItems = await readCurationCards(env).catch(() => []);
@@ -178,8 +198,20 @@ async function runBriefing(env) {
       console.error('[newsletter]', err.message);
     }
   }
-  console.log(`브리핑 ${items.length}건 Sheets 저장 완료`);
+  console.log(`브리핑 생성 ${items.length}건 / Sheets 신규 저장 ${savedCount}건 완료`);
   return items;
+}
+
+function mergeBriefingItems(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    if (!isRelevantBriefingItem(item)) return false;
+    const keys = getBriefingDedupKeys(item);
+    const key = keys[0] || normalizeText(`${item.title} ${item.link}`);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function normalizeBriefingItems(items) {
@@ -796,7 +828,7 @@ async function appendToSheets(env, items) {
     return true;
   });
 
-  if (!filteredItems.length) return;
+  if (!filteredItems.length) return 0;
 
   const values = filteredItems.map((item) => [
     item.date ?? '',
@@ -825,6 +857,8 @@ async function appendToSheets(env, items) {
     const err = await res.text();
     throw new Error(`Sheets 쓰기 실패: ${err}`);
   }
+
+  return filteredItems.length;
 }
 
 async function readExistingBriefingKeys(env, token) {
