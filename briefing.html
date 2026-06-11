@@ -277,11 +277,8 @@ nav a { text-decoration: none; }
       const sortedAll = all
         .filter((r) => r && r.date && r.title)
         .sort((a, b) => String(b.date).localeCompare(String(a.date)));
-      const latestDate = sortedAll[0]?.date;
-      const activeDate = sortedAll.some((r) => r.date === today) ? today : latestDate;
-
-      const todayItems = sortedAll.filter((r) => r.date === activeDate);
-      const archiveItems = sortedAll.filter((r) => r.date !== activeDate);
+      const todayItems = sortedAll.filter((r) => r.date === today);
+      const archiveItems = sortedAll.filter((r) => r.date !== today);
 
       hide('briefing-loading');
 

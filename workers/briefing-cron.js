@@ -822,7 +822,7 @@ async function appendToSheets(env, items) {
   const existingKeys = await readExistingBriefingKeys(env, token);
   const incomingKeys = new Set();
   const filteredItems = items.filter((item) => isRelevantBriefingItem(item)).filter((item) => {
-    const keys = getBriefingDedupKeys(item);
+    const keys = getBriefingDedupKeys(item, { includeDate: false });
     if (!keys.length || keys.some((key) => existingKeys.has(key) || incomingKeys.has(key))) return false;
     keys.forEach((key) => incomingKeys.add(key));
     return true;
@@ -872,7 +872,7 @@ async function readExistingBriefingKeys(env, token) {
 
   const data = await res.json();
   return new Set((data.values ?? [])
-    .flatMap(([date, category, title, summary, source, link]) => getBriefingDedupKeys({ date, title, link }))
+    .flatMap(([date, category, title, summary, source, link]) => getBriefingDedupKeys({ date, title, link }, { includeDate: false }))
     .filter(Boolean));
 }
 
@@ -907,12 +907,12 @@ async function readFromSheets(env) {
   })).filter((item) => !isPlaceholderBriefing(item) && isPublishedBriefing(item) && isRelevantBriefingItem(item));
 
   const seen = new Set();
-  const deduped = rows.reverse().filter((item) => {
-    const keys = getBriefingDedupKeys(item);
+  const deduped = rows.filter((item) => {
+    const keys = getBriefingDedupKeys(item, { includeDate: false });
     if (!keys.length || keys.some((key) => seen.has(key))) return false;
     keys.forEach((key) => seen.add(key));
     return true;
-  }).reverse();
+  });
 
   const byDate = new Map();
   for (const item of deduped) {
@@ -1377,6 +1377,7 @@ function isRelevantBriefingItem(item) {
     /클래스팅\s*블로그|blog\.classting\.com\/2026checklist/,
   ];
   if (hardReject.some((pattern) => pattern.test(text))) return false;
+  if (hasStaleExplicitDate(item)) return false;
 
   const audience = /대학|교육|학교|교원|학생|학습|강의|고등교육|공공|기관|정부|교육부|keris|직무교육|훈련|인재원/.test(text);
   const service = /콘텐츠|온라인|원격|이러닝|lms|플랫폼|sw|소프트웨어|에듀테크|스튜디오|xr|실감|메타버스|ai\s*교육|디지털\s*교육|강좌|커리큘럼|mooc/.test(text);
@@ -1386,6 +1387,28 @@ function isRelevantBriefingItem(item) {
   return (audience && service) || officialAi;
 }
 
+function hasStaleExplicitDate(item, maxAgeDays = 8) {
+  const base = Date.parse(`${String(item?.date || '').trim()}T00:00:00+09:00`);
+  if (!Number.isFinite(base)) return false;
+
+  const text = `${item?.title || ''} ${item?.summary || ''}`;
+  const currentYear = new Date(base).getUTCFullYear();
+  const dates = [];
+  const fullDatePattern = /(20\d{2})년\s*(\d{1,2})월\s*(\d{1,2})일/g;
+  const monthDayPattern = /(?<!년\s*)(\d{1,2})월\s*(\d{1,2})일/g;
+
+  let match;
+  while ((match = fullDatePattern.exec(text))) {
+    dates.push(Date.parse(`${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}T00:00:00+09:00`));
+  }
+  while ((match = monthDayPattern.exec(text))) {
+    dates.push(Date.parse(`${currentYear}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}T00:00:00+09:00`));
+  }
+
+  const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+  return dates.some((time) => Number.isFinite(time) && time <= base && base - time > maxAgeMs);
+}
+
 function isStronglyRelevantBriefingItem(item) {
   const text = `${item?.category || ''} ${item?.title || ''} ${item?.summary || ''} ${item?.source || ''}`.toLowerCase();
   const institution = /대학|교육부|keris|한국교육학술정보원|공공기관|인재원|학교|고등교육/.test(text);
@@ -1393,13 +1416,15 @@ function isStronglyRelevantBriefingItem(item) {
   return institution && coreWork;
 }
 
-function getBriefingDedupKeys(item) {
+function getBriefingDedupKeys(item, options = {}) {
+  const includeDate = options.includeDate !== false;
   const date = String(item?.date || '').trim();
   const linkKey = normalizeBriefingUrl(item?.link);
   const titleKey = normalizeBriefingTitleForDedup(item?.title);
+  const prefix = includeDate ? `${date}|` : '';
   return [
-    linkKey ? `${date}|url|${linkKey}` : '',
-    titleKey ? `${date}|title|${titleKey}` : '',
+    linkKey ? `${prefix}url|${linkKey}` : '',
+    titleKey ? `${prefix}title|${titleKey}` : '',
   ].filter(Boolean);
 }
 
